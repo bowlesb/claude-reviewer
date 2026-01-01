@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -141,32 +142,41 @@ def comments(pr_id: str, output_format: str, unresolved: bool) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
-    comment_list = db.get_comments(pr_id, unresolved_only=unresolved)
+    comments_with_replies = db.get_comments_with_replies(pr_id, unresolved_only=unresolved)
 
     if output_format == "json":
         output = {
             "pr_id": pr_id,
             "comments": [
                 {
+                    "uuid": c.uuid,
                     "file": c.file_path,
                     "line": c.line_number,
                     "text": c.content,
                     "resolved": c.resolved,
+                    "replies": [
+                        {"author": r.author, "text": r.content}
+                        for r in replies
+                    ],
                 }
-                for c in comment_list
+                for c, replies in comments_with_replies
             ],
         }
         print(json.dumps(output, indent=2))
     else:
-        if not comment_list:
+        if not comments_with_replies:
             console.print("[dim]No comments found[/dim]")
             return
 
-        for c in comment_list:
+        for c, replies in comments_with_replies:
             resolved_mark = "[dim](resolved)[/dim] " if c.resolved else ""
             console.print(
-                f"{resolved_mark}[cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
+                f"{resolved_mark}[cyan][{c.file_path}:{c.line_number}][/cyan] "
+                f"[dim]({c.uuid})[/dim] {c.content}"
             )
+            for r in replies:
+                author_color = "green" if r.author == "claude" else "blue"
+                console.print(f"  [{author_color}]↳ {r.author}:[/{author_color}] {r.content}")
 
 
 @main.command("list")
@@ -473,6 +483,127 @@ def stop(web_dir_opt: str | None) -> None:
         cwd=web_dir,
     )
     console.print("[green]Stopped[/green]")
+
+
+@main.command()
+@click.argument("pr_id")
+@click.argument("comment_uuid")
+@click.argument("message")
+@click.option("--author", "-a", default="claude", help="Author name (default: claude)")
+def reply(pr_id: str, comment_uuid: str, message: str, author: str) -> None:
+    """Reply to a comment explaining what was done to address it."""
+    pr = db.get_pr_by_uuid(pr_id)
+    if not pr:
+        console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
+        sys.exit(1)
+
+    comment = db.get_comment_by_uuid(comment_uuid)
+    if not comment:
+        console.print(f"[red]Error: Comment '{comment_uuid}' not found[/red]")
+        sys.exit(1)
+
+    try:
+        reply_uuid = db.add_reply(comment_uuid, message, author)
+        console.print(f"[green]Reply added to comment {comment_uuid}[/green]")
+        console.print(f"[dim]Reply ID: {reply_uuid}[/dim]")
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
+
+
+@main.command()
+@click.argument("pr_id")
+@click.option(
+    "--until",
+    "-u",
+    type=click.Choice(["approved", "changes_requested", "pending", "any_change"]),
+    default="approved",
+    help="Wait until this status (default: approved)",
+)
+@click.option("--interval", "-i", default=5, help="Polling interval in seconds")
+@click.option("--timeout", "-t", default=0, help="Timeout in seconds (0 = no timeout)")
+def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
+    """Watch a PR and wait for status changes.
+
+    Useful for waiting after making changes to see if the reviewer approves.
+    """
+    pr = db.get_pr_by_uuid(pr_id)
+    if not pr:
+        console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
+        sys.exit(1)
+
+    initial_status = pr.status.value
+    initial_updated = pr.updated_at
+
+    console.print(f"[bold]Watching PR #{pr_id}[/bold]")
+    console.print(f"Current status: [yellow]{initial_status}[/yellow]")
+    console.print(f"Waiting for: [cyan]{until}[/cyan]")
+    console.print(f"[dim]Polling every {interval}s... (Ctrl+C to stop)[/dim]\n")
+
+    start_time = time.time()
+
+    try:
+        while True:
+            time.sleep(interval)
+
+            # Check timeout
+            if timeout > 0 and (time.time() - start_time) > timeout:
+                console.print("[yellow]Timeout reached[/yellow]")
+                sys.exit(1)
+
+            # Refresh PR data
+            pr = db.get_pr_by_uuid(pr_id)
+            if not pr:
+                console.print("[red]PR no longer exists[/red]")
+                sys.exit(1)
+
+            current_status = pr.status.value
+
+            # Check for any change
+            if until == "any_change":
+                if current_status != initial_status or pr.updated_at != initial_updated:
+                    console.print(f"[green]Change detected![/green]")
+                    console.print(f"Status: [bold]{current_status}[/bold]")
+
+                    # Show new comments if any
+                    comments_list = db.get_comments(pr_id, unresolved_only=True)
+                    if comments_list:
+                        console.print(f"\n[bold]Unresolved comments ({len(comments_list)}):[/bold]")
+                        for c in comments_list:
+                            console.print(
+                                f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
+                            )
+                    sys.exit(0)
+            else:
+                # Check for specific status
+                if current_status == until:
+                    status_colors = {
+                        "approved": "green",
+                        "changes_requested": "red",
+                        "pending": "yellow",
+                    }
+                    color = status_colors.get(until, "white")
+                    console.print(f"[{color}]PR is now {until}![/{color}]")
+
+                    if until == "changes_requested":
+                        # Show the comments
+                        comments_list = db.get_comments(pr_id, unresolved_only=True)
+                        if comments_list:
+                            console.print(f"\n[bold]Review comments:[/bold]")
+                            for c in comments_list:
+                                console.print(
+                                    f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
+                                    f"[dim]({c.uuid})[/dim] {c.content}"
+                                )
+                    sys.exit(0)
+
+            # Show heartbeat
+            elapsed = int(time.time() - start_time)
+            console.print(f"[dim]Still {initial_status}... ({elapsed}s elapsed)[/dim]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped watching[/yellow]")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

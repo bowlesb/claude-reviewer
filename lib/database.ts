@@ -48,6 +48,15 @@ export interface DiffSnapshot {
   created_at: string;
 }
 
+export interface CommentReply {
+  id: number;
+  uuid: string;
+  comment_id: number;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
 // Database path - shared with Python CLI
 const DB_DIR = process.env.DATABASE_DIR || path.join(os.homedir(), '.claude-reviewer');
 const DB_PATH = process.env.DATABASE_PATH || path.join(DB_DIR, 'data.db');
@@ -158,6 +167,18 @@ function initSchema(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_reviews_pr ON reviews(pr_id);
+
+    -- Comment replies table
+    CREATE TABLE IF NOT EXISTS comment_replies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE NOT NULL,
+        comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+        author TEXT NOT NULL DEFAULT 'user',
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_replies_comment ON comment_replies(comment_id);
   `);
 }
 
@@ -413,6 +434,61 @@ export function getReviews(prUuid: string): Review[] {
   return db.prepare(`
     SELECT * FROM reviews WHERE pr_id = ? ORDER BY created_at DESC
   `).all(pr.id) as Review[];
+}
+
+// =============================================================================
+// Comment Reply Operations
+// =============================================================================
+
+export function addReply(
+  commentUuid: string,
+  content: string,
+  author: string = 'user'
+): string {
+  const db = getDatabase();
+  const replyUuid = generateUuid();
+
+  const comment = db.prepare('SELECT id, pr_id FROM comments WHERE uuid = ?').get(commentUuid) as { id: number; pr_id: number } | undefined;
+  if (!comment) throw new Error(`Comment ${commentUuid} not found`);
+
+  const transaction = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO comment_replies (uuid, comment_id, author, content)
+      VALUES (?, ?, ?, ?)
+    `).run(replyUuid, comment.id, author, content);
+
+    db.prepare(
+      'UPDATE pull_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(comment.pr_id);
+  });
+
+  transaction();
+  return replyUuid;
+}
+
+export function getReplies(commentUuid: string): CommentReply[] {
+  const db = getDatabase();
+
+  const comment = db.prepare('SELECT id FROM comments WHERE uuid = ?').get(commentUuid) as { id: number } | undefined;
+  if (!comment) return [];
+
+  return db.prepare(`
+    SELECT * FROM comment_replies WHERE comment_id = ? ORDER BY created_at
+  `).all(comment.id) as CommentReply[];
+}
+
+export function getCommentByUuid(commentUuid: string): Comment | null {
+  const db = getDatabase();
+  const row = db.prepare('SELECT * FROM comments WHERE uuid = ?').get(commentUuid);
+  return row as Comment | null;
+}
+
+export function getCommentsWithReplies(prUuid: string, unresolvedOnly: boolean = false): Array<{ comment: Comment; replies: CommentReply[] }> {
+  const comments = getComments(prUuid, { unresolvedOnly });
+  return comments.map(comment => ({
+    comment,
+    replies: getReplies(comment.uuid)
+  }));
 }
 
 // =============================================================================

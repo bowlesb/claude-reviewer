@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generator
 
-from .models import Comment, PRStatus, PullRequest, ReviewAction
+from .models import Comment, CommentReply, PRStatus, PullRequest, ReviewAction
 
 if TYPE_CHECKING:
     pass
@@ -79,6 +79,18 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reviews_pr ON reviews(pr_id);
+
+-- Comment replies table
+CREATE TABLE IF NOT EXISTS comment_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid TEXT UNIQUE NOT NULL,
+    comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    author TEXT NOT NULL DEFAULT 'user',
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_replies_comment ON comment_replies(comment_id);
 """
 
 
@@ -473,3 +485,101 @@ def get_reviews(pr_uuid: str) -> list[dict[str, Any]]:
         ).fetchall()
 
         return [dict(row) for row in rows]
+
+
+# =============================================================================
+# Comment Reply Operations
+# =============================================================================
+
+
+def _row_to_reply(row: sqlite3.Row) -> CommentReply:
+    """Convert a database row to a CommentReply object."""
+    return CommentReply(
+        id=row["id"],
+        uuid=row["uuid"],
+        comment_id=row["comment_id"],
+        author=row["author"],
+        content=row["content"],
+        created_at=row["created_at"],
+    )
+
+
+def add_reply(
+    comment_uuid: str,
+    content: str,
+    author: str = "claude",
+) -> str:
+    """Add a reply to a comment and return its UUID."""
+    reply_uuid = generate_uuid()
+
+    with get_connection() as conn:
+        comment = conn.execute(
+            "SELECT id, pr_id FROM comments WHERE uuid = ?",
+            (comment_uuid,),
+        ).fetchone()
+
+        if not comment:
+            raise ValueError(f"Comment {comment_uuid} not found")
+
+        conn.execute(
+            """
+            INSERT INTO comment_replies (uuid, comment_id, author, content)
+            VALUES (?, ?, ?, ?)
+            """,
+            (reply_uuid, comment["id"], author, content),
+        )
+
+        # Update PR timestamp
+        conn.execute(
+            "UPDATE pull_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (comment["pr_id"],),
+        )
+
+    return reply_uuid
+
+
+def get_replies(comment_uuid: str) -> list[CommentReply]:
+    """Get all replies for a comment."""
+    with get_connection() as conn:
+        comment = conn.execute(
+            "SELECT id FROM comments WHERE uuid = ?",
+            (comment_uuid,),
+        ).fetchone()
+
+        if not comment:
+            return []
+
+        rows = conn.execute(
+            """
+            SELECT * FROM comment_replies WHERE comment_id = ? ORDER BY created_at
+            """,
+            (comment["id"],),
+        ).fetchall()
+
+        return [_row_to_reply(row) for row in rows]
+
+
+def get_comment_by_uuid(comment_uuid: str) -> Comment | None:
+    """Get a comment by its UUID."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM comments WHERE uuid = ?",
+            (comment_uuid,),
+        ).fetchone()
+
+        if row:
+            return _row_to_comment(row)
+    return None
+
+
+def get_comments_with_replies(
+    pr_uuid: str,
+    unresolved_only: bool = False,
+) -> list[tuple[Comment, list[CommentReply]]]:
+    """Get comments for a PR with their replies."""
+    comments_list = get_comments(pr_uuid, unresolved_only=unresolved_only)
+    result = []
+    for comment in comments_list:
+        replies = get_replies(comment.uuid)
+        result.append((comment, replies))
+    return result

@@ -1,39 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPRByUuid, getComments, addComment, resolveComment, updateCommentContent, deleteComment } from '@/lib/database';
+import { getPRByUuid, getCommentsWithReplies, addComment, resolveComment, updateCommentContent, deleteComment, addReply } from '@/lib/database';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// GET /api/prs/[id]/comments - List comments
+// GET /api/prs/[id]/comments - List comments with replies
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const unresolvedOnly = searchParams.get('unresolved') === 'true';
-    const filePath = searchParams.get('file') || undefined;
 
     const pr = getPRByUuid(id);
     if (!pr) {
       return NextResponse.json({ error: 'PR not found' }, { status: 404 });
     }
 
-    const comments = getComments(id, { unresolvedOnly, filePath });
+    const commentsWithReplies = getCommentsWithReplies(id, unresolvedOnly);
 
-    return NextResponse.json({ comments });
+    return NextResponse.json({ comments: commentsWithReplies });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// POST /api/prs/[id]/comments - Add a comment
+// POST /api/prs/[id]/comments - Add a comment or reply
 export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const { filePath, lineNumber, content, lineType } = body;
+    const { filePath, lineNumber, content, lineType, commentUuid, author } = body;
 
+    const pr = getPRByUuid(id);
+    if (!pr) {
+      return NextResponse.json({ error: 'PR not found' }, { status: 404 });
+    }
+
+    // If commentUuid is provided, this is a reply
+    if (commentUuid) {
+      if (!content) {
+        return NextResponse.json(
+          { error: 'Missing required field: content' },
+          { status: 400 }
+        );
+      }
+      const replyUuid = addReply(commentUuid, content, author || 'user');
+      return NextResponse.json({
+        uuid: replyUuid,
+        message: 'Reply added',
+      }, { status: 201 });
+    }
+
+    // Otherwise, this is a new comment
     if (!filePath || lineNumber === undefined || !content) {
       return NextResponse.json(
         { error: 'Missing required fields: filePath, lineNumber, content' },
@@ -41,15 +61,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const pr = getPRByUuid(id);
-    if (!pr) {
-      return NextResponse.json({ error: 'PR not found' }, { status: 404 });
-    }
-
-    const commentUuid = addComment(id, filePath, lineNumber, content, lineType || 'new');
+    const newCommentUuid = addComment(id, filePath, lineNumber, content, lineType || 'new');
 
     return NextResponse.json({
-      uuid: commentUuid,
+      uuid: newCommentUuid,
       message: 'Comment added',
     }, { status: 201 });
   } catch (error: unknown) {

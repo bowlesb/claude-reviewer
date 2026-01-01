@@ -29,6 +29,14 @@ interface PullRequest {
   updated_at: string;
 }
 
+interface CommentReply {
+  id: number;
+  uuid: string;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
 interface Comment {
   id: number;
   uuid: string;
@@ -37,6 +45,11 @@ interface Comment {
   content: string;
   resolved: boolean;
   created_at: string;
+}
+
+interface CommentWithReplies {
+  comment: Comment;
+  replies: CommentReply[];
 }
 
 interface FileInfo {
@@ -50,7 +63,7 @@ interface PRData {
   pr: PullRequest;
   diff: string;
   files: FileInfo[];
-  comments: Comment[];
+  comments: CommentWithReplies[];
 }
 
 const statusConfig = {
@@ -107,14 +120,17 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
     if (!commentingAt || !newComment.trim() || !data) return;
 
     const tempUuid = `temp-${Date.now()}`;
-    const newCommentObj: Comment = {
-      id: Date.now(),
-      uuid: tempUuid,
-      file_path: commentingAt.file,
-      line_number: commentingAt.line,
-      content: newComment,
-      resolved: false,
-      created_at: new Date().toISOString(),
+    const newCommentObj: CommentWithReplies = {
+      comment: {
+        id: Date.now(),
+        uuid: tempUuid,
+        file_path: commentingAt.file,
+        line_number: commentingAt.line,
+        content: newComment,
+        resolved: false,
+        created_at: new Date().toISOString(),
+      },
+      replies: [],
     };
 
     // Optimistically update local state
@@ -141,27 +157,31 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         prev
           ? {
               ...prev,
-              comments: prev.comments.map((c) => (c.uuid === tempUuid ? { ...c, uuid: result.uuid } : c)),
+              comments: prev.comments.map((c) =>
+                c.comment.uuid === tempUuid ? { ...c, comment: { ...c.comment, uuid: result.uuid } } : c
+              ),
             }
           : prev
       );
     } catch (e) {
       alert('Error adding comment');
       // Revert on error
-      setData((prev) => (prev ? { ...prev, comments: prev.comments.filter((c) => c.uuid !== tempUuid) } : prev));
+      setData((prev) => (prev ? { ...prev, comments: prev.comments.filter((c) => c.comment.uuid !== tempUuid) } : prev));
     }
   };
 
   const editComment = async () => {
     if (!editingComment || !editingComment.content.trim() || !data) return;
 
-    const originalComment = data.comments.find((c) => c.uuid === editingComment.uuid);
+    const originalCommentWithReplies = data.comments.find((c) => c.comment.uuid === editingComment.uuid);
 
     // Optimistically update local state
     setData({
       ...data,
       comments: data.comments.map((c) =>
-        c.uuid === editingComment.uuid ? { ...c, content: editingComment.content } : c
+        c.comment.uuid === editingComment.uuid
+          ? { ...c, comment: { ...c.comment, content: editingComment.content } }
+          : c
       ),
     });
     setEditingComment(null);
@@ -178,10 +198,10 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
     } catch (e) {
       alert('Error updating comment');
       // Revert on error
-      if (originalComment) {
+      if (originalCommentWithReplies) {
         setData((prev) =>
           prev
-            ? { ...prev, comments: prev.comments.map((c) => (c.uuid === editingComment.uuid ? originalComment : c)) }
+            ? { ...prev, comments: prev.comments.map((c) => (c.comment.uuid === editingComment.uuid ? originalCommentWithReplies : c)) }
             : prev
         );
       }
@@ -194,7 +214,9 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
     // Optimistically update local state
     setData({
       ...data,
-      comments: data.comments.map((c) => (c.uuid === commentUuid ? { ...c, resolved } : c)),
+      comments: data.comments.map((c) =>
+        c.comment.uuid === commentUuid ? { ...c, comment: { ...c.comment, resolved } } : c
+      ),
     });
 
     try {
@@ -207,7 +229,14 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       alert('Error updating comment');
       // Revert on error
       setData((prev) =>
-        prev ? { ...prev, comments: prev.comments.map((c) => (c.uuid === commentUuid ? { ...c, resolved: !resolved } : c)) } : prev
+        prev
+          ? {
+              ...prev,
+              comments: prev.comments.map((c) =>
+                c.comment.uuid === commentUuid ? { ...c, comment: { ...c.comment, resolved: !resolved } } : c
+              ),
+            }
+          : prev
       );
     }
   };
@@ -246,9 +275,9 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Get comments for a specific file
-  const getFileComments = (filePath: string): Comment[] => {
+  const getFileComments = (filePath: string): CommentWithReplies[] => {
     if (!data) return [];
-    return data.comments.filter((c) => c.file_path === filePath);
+    return data.comments.filter((c) => c.comment.file_path === filePath);
   };
 
   if (loading) {
@@ -271,7 +300,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const { pr, diff, files, comments } = data;
   const config = statusConfig[pr.status];
   const StatusIcon = config.icon;
-  const unresolvedCount = comments.filter((c) => !c.resolved).length;
+  const unresolvedCount = comments.filter((c) => !c.comment.resolved).length;
 
   return (
     <main className="container pr-detail">
@@ -418,7 +447,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
                       // Find comments for this line
                       const lineComments = fileComments.filter(
-                        (c) => c.line_number === currentLine && !line.startsWith('-') && !line.startsWith('@@')
+                        (c) => c.comment.line_number === currentLine && !line.startsWith('-') && !line.startsWith('@@')
                       );
 
                       return (
@@ -440,8 +469,8 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                             </span>
                           </div>
 
-                          {/* Inline comments */}
-                          {lineComments.map((c) => (
+                          {/* Inline comments with replies */}
+                          {lineComments.map(({ comment: c, replies }) => (
                             <div key={c.uuid} className={`inline-comment ${c.resolved ? 'resolved' : ''}`}>
                               {editingComment?.uuid === c.uuid ? (
                                 <div className="edit-comment-form">
@@ -473,6 +502,17 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                                       {c.resolved ? 'Unresolve' : 'Resolve'}
                                     </button>
                                   </div>
+                                  {/* Replies */}
+                                  {replies.length > 0 && (
+                                    <div className="comment-replies">
+                                      {replies.map((r) => (
+                                        <div key={r.uuid} className={`comment-reply ${r.author === 'claude' ? 'reply-claude' : 'reply-user'}`}>
+                                          <span className="reply-author">{r.author}:</span>
+                                          <span className="reply-content">{r.content}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -842,6 +882,46 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
         .edit-comment-form {
           width: 100%;
+        }
+
+        .comment-replies {
+          margin-top: 0.75rem;
+          padding-top: 0.75rem;
+          border-top: 1px solid #30363d;
+        }
+
+        .comment-reply {
+          padding: 0.5rem;
+          margin-bottom: 0.5rem;
+          border-radius: 4px;
+          font-size: 0.9rem;
+        }
+
+        .reply-claude {
+          background: rgba(35, 134, 54, 0.15);
+          border-left: 3px solid #3fb950;
+        }
+
+        .reply-user {
+          background: rgba(56, 139, 253, 0.15);
+          border-left: 3px solid #58a6ff;
+        }
+
+        .reply-author {
+          font-weight: 600;
+          margin-right: 0.5rem;
+        }
+
+        .reply-claude .reply-author {
+          color: #3fb950;
+        }
+
+        .reply-user .reply-author {
+          color: #58a6ff;
+        }
+
+        .reply-content {
+          color: #c9d1d9;
         }
 
         .edit-comment-form textarea {

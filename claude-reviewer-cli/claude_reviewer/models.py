@@ -66,3 +66,13 @@ class DiffSnapshot:
     diff_content: str
     head_commit: str
     created_at: Optional[datetime] = None
+
+
+@dataclass
+class CommentReply:
+    id: int
+    uuid: str
+    comment_id: int
+    author: str
+    content: str
+    created_at: Optional[datetime] = None
