@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  claude-reviewer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Mount the SQLite database directory from host
+      - ~/.claude-reviewer:/data:rw
+      # Mount the user's home directory for repository access (read-only)
+      # This allows the web app to access git repositories
+      - ~/:/host-home:ro
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=/data/data.db
+      - HOST_PATH_PREFIX=/host-home
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
