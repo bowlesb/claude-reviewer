@@ -255,10 +255,15 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
             <h3>Files Changed ({files.length})</h3>
             <div className="file-list">
               {files.map((file) => (
-                <button
+                <a
                   key={file.path}
                   className={`file-item ${expandedFiles.has(file.path) ? 'active' : ''}`}
-                  onClick={() => toggleFile(file.path)}
+                  href={`#file-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}`}
+                  onClick={() => {
+                    if (!expandedFiles.has(file.path)) {
+                      toggleFile(file.path);
+                    }
+                  }}
                 >
                   <File size={14} />
                   <span className="file-name">{file.path.split('/').pop()}</span>
@@ -266,7 +271,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                     <span className="additions">+{file.additions}</span>
                     <span className="deletions">-{file.deletions}</span>
                   </span>
-                </button>
+                </a>
               ))}
             </div>
           </div>
@@ -328,7 +333,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
             let lineNum = 0;
 
             return (
-              <div key={file.path} className="file-diff">
+              <div key={file.path} id={`file-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}`} className="file-diff">
                 <div className="file-header" onClick={() => toggleFile(file.path)}>
                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   <span className="file-path">{file.path}</span>
@@ -376,7 +381,9 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                               {!line.startsWith('-') && !line.startsWith('@@') ? currentLine : ''}
                               <Plus size={12} className="add-comment-icon" />
                             </span>
-                            <span className="line-content">{line}</span>
+                            <span className="line-content">
+                              {line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
+                            </span>
                           </div>
 
                           {/* Inline comments */}
@@ -534,6 +541,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           border-radius: 4px;
           text-align: left;
           font-size: 0.8rem;
+          text-decoration: none;
         }
 
         .file-item:hover,
