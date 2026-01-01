@@ -10,9 +10,11 @@ services:
     volumes:
       # Mount the SQLite database directory from host
       - ~/.claude-reviewer:/data:rw
-      # Mount the user's home directory for repository access (read-only)
+      # Mount the user's home directory for repository access
       # This allows the web app to access git repositories
-      - ~/:/host-home:ro
+      - ~/:/host-home:rw
+      # Mount /tmp for test repositories
+      - /private/tmp:/private/tmp:rw
     environment:
       - NODE_ENV=production
       - DATABASE_PATH=/data/data.db

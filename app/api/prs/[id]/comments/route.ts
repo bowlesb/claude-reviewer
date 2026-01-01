@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPRByUuid, getComments, addComment, resolveComment, deleteComment } from '@/lib/database';
+import { getPRByUuid, getComments, addComment, resolveComment, updateCommentContent, deleteComment } from '@/lib/database';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -58,20 +58,30 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PATCH /api/prs/[id]/comments - Resolve/unresolve a comment
+// PATCH /api/prs/[id]/comments - Resolve/unresolve or edit a comment
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   try {
     const body = await req.json();
-    const { commentUuid, resolved } = body;
+    const { commentUuid, resolved, content } = body;
 
-    if (!commentUuid || resolved === undefined) {
+    if (!commentUuid) {
       return NextResponse.json(
-        { error: 'Missing required fields: commentUuid, resolved' },
+        { error: 'Missing required field: commentUuid' },
         { status: 400 }
       );
     }
 
-    const success = resolveComment(commentUuid, resolved);
+    let success = false;
+
+    // Update content if provided
+    if (content !== undefined) {
+      success = updateCommentContent(commentUuid, content);
+    }
+
+    // Update resolved status if provided
+    if (resolved !== undefined) {
+      success = resolveComment(commentUuid, resolved);
+    }
 
     if (!success) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 });

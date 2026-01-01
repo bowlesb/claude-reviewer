@@ -1,79 +1,120 @@
 # Claude Reviewer
 
-A local PR review system for Claude Code. Create pull requests, review diffs with inline comments, and merge changes—all without leaving your local environment.
+[![PyPI version](https://badge.fury.io/py/claude-reviewer.svg)](https://badge.fury.io/py/claude-reviewer)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Overview
+A local PR review system designed for AI-assisted development with Claude Code. Create pull requests, review diffs with inline comments, and manage code reviews—all without leaving your local environment or pushing to GitHub.
 
-Claude Reviewer provides a GitHub-like code review experience for local development:
+## Why Claude Reviewer?
 
-- **Python CLI** (`claude-reviewer`) - Create and manage PRs from the command line
-- **Web UI** - Review diffs, add inline comments, approve or request changes
-- **SQLite Database** - Persistent storage shared between CLI and web app
+When working with Claude Code on complex changes, you need a way to:
 
+- **Review AI-generated code** before merging into your main branch
+- **Leave inline comments** on specific lines for Claude to address
+- **Track review status** across multiple iterations
+- **Maintain a clean git history** with proper PR workflow
+
+Claude Reviewer bridges the gap between local development and GitHub-style code review.
+
+## Installation
+
+### CLI (Required)
+
+```bash
+pip install claude-reviewer
 ```
-┌─────────────────┐          ┌─────────────────┐
-│  Claude (CLI)   │          │  User (Browser) │
-└────────┬────────┘          └────────┬────────┘
-         │                            │
-         │ claude-reviewer create     │ http://localhost:3000
-         │ claude-reviewer status     │
-         │ claude-reviewer comments   │
-         v                            v
-┌────────────────────────────────────────────────┐
-│              SQLite Database                   │
-│           ~/.claude-reviewer/data.db           │
-└────────────────────────────────────────────────┘
+
+### Web UI (Optional)
+
+The web UI runs via Docker and is started from the CLI:
+
+```bash
+# Clone the repo for the web UI
+git clone https://github.com/bowlesb/claude-reviewer.git
+cd claude-reviewer
+
+# Start the web UI
+claude-reviewer serve
 ```
 
 ## Quick Start
 
-### 1. Install the CLI
+### 1. Create a PR
+
+From your project directory, on a feature branch:
 
 ```bash
-cd claude-reviewer-cli
-pip install -e .
-```
-
-### 2. Start the Web UI
-
-**Option A: Using npm (development)**
-```bash
-npm install
-npm run dev
-```
-
-**Option B: Using Docker**
-```bash
-# From the claude_reviewer directory
-claude-reviewer serve
-
-# Or specify the directory explicitly
-claude-reviewer serve --dir /path/to/claude_reviewer
-```
-
-### 3. Create Your First PR
-
-```bash
-# From your project directory, on a feature branch
-claude-reviewer create --title "Add new feature"
+claude-reviewer create --title "Add authentication system"
 
 # Output:
 # PR #a1b2c3d4 created successfully
 # Review URL: http://localhost:3000/prs/a1b2c3d4
 ```
 
-### 4. Review and Merge
+### 2. Review in the Web UI
 
-1. Open the review URL in your browser
-2. Review the diff and add inline comments
-3. Approve or request changes
-4. Once approved, merge via CLI:
+Open the review URL to:
+- View the diff with syntax highlighting
+- Add inline comments on any line
+- Approve or request changes
+
+### 3. Address Feedback
+
+When you (or Claude) need to address review comments:
 
 ```bash
+# Check comments
+claude-reviewer comments a1b2c3d4
+
+# Output:
+# [src/auth.py:42] Add error handling for invalid tokens
+# [src/auth.py:87] Consider using a constant for the expiry time
+
+# After making fixes
+git commit -m "Address review feedback"
+claude-reviewer update a1b2c3d4
+```
+
+### 4. Merge When Approved
+
+Once the PR is approved:
+
+```bash
+# Check status
+claude-reviewer status a1b2c3d4
+# Output: approved
+
+# Merge the PR
 claude-reviewer merge a1b2c3d4
 ```
 
-## CLI Commands
+## Architecture
+
+```
+                    ┌─────────────────┐
+                    │   Web Browser   │
+                    │  localhost:3000 │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         v                   v                   v
+┌─────────────────┐  ┌──────────────┐  ┌─────────────────┐
+│  claude-reviewer │  │   Next.js    │  │   Claude Code   │
+│      CLI        │  │   Web App    │  │   (via CLI)     │
+└────────┬────────┘  └──────┬───────┘  └────────┬────────┘
+         │                  │                   │
+         └──────────────────┼───────────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │     SQLite      │
+                   │   ~/.claude-    │
+                   │ reviewer/data.db│
+                   └─────────────────┘
+```
+
+## CLI Reference
 
 | Command | Description |
 |---------|-------------|
@@ -87,35 +128,33 @@ claude-reviewer merge a1b2c3d4
 | `claude-reviewer serve` | Start the web UI (Docker) |
 | `claude-reviewer stop` | Stop the web UI |
 
-### CLI Examples
+### Common Options
 
 ```bash
-# Create a PR comparing current branch to main
-claude-reviewer create --title "Fix authentication bug" --base main
+# Create with custom base branch
+claude-reviewer create -t "Feature" --base develop
 
-# Create with description
-claude-reviewer create -t "Add user settings" -d "Implements user preferences page"
+# Get comments as JSON (useful for automation)
+claude-reviewer comments a1b2c3d4 --format json
 
-# Get comments in JSON format (useful for automation)
-claude-reviewer comments a1b2c3d4 --json
-
-# List only pending PRs
+# Filter PR list by status
 claude-reviewer list --status pending
 
-# Merge and push to remote
-claude-reviewer merge a1b2c3d4 --push
+# Merge without pushing to remote
+claude-reviewer merge a1b2c3d4 --no-push
 
-# Merge and delete the source branch
+# Merge and delete source branch
 claude-reviewer merge a1b2c3d4 --delete-branch
 ```
 
 ## Web UI Features
 
-- **PR List Dashboard** - View all PRs with status filtering
-- **Diff Viewer** - Side-by-side or unified diff view
-- **Inline Comments** - Click any line to add a comment
-- **File Tree** - Navigate between changed files
-- **Review Actions** - Approve or request changes with summary
+- **PR Dashboard** - View all PRs with status indicators
+- **GitHub-style Diff Viewer** - Syntax highlighted, unified diff view
+- **Inline Comments** - Click any line number to add a comment
+- **File Navigation** - Jump between changed files via sidebar
+- **Review Actions** - Approve or request changes with optional summary
+- **Comment Resolution** - Mark comments as resolved/unresolved
 
 ## Configuration
 
@@ -124,155 +163,129 @@ claude-reviewer merge a1b2c3d4 --delete-branch
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_DIR` | Directory for SQLite database | `~/.claude-reviewer` |
-| `DATABASE_PATH` | Full path to database file | `~/.claude-reviewer/data.db` |
 | `CLAUDE_REVIEWER_HOST` | Host for review URLs | `localhost` |
-| `CLAUDE_REVIEWER_WEB_DIR` | Path to web app directory | (auto-detected) |
-| `ANTHROPIC_API_KEY` | API key for preference learning | (optional) |
+| `CLAUDE_REVIEWER_WEB_DIR` | Path to web UI directory | (auto-detected) |
 
-### Docker Configuration
+### Docker Volumes
 
-The web UI runs in Docker with the following volume mounts:
+The web UI mounts these volumes:
 
 ```yaml
 volumes:
-  - ~/.claude-reviewer:/data:rw      # Database access
-  - /Users:/host-users:ro            # Repository access (read-only)
+  - ~/.claude-reviewer:/data:rw     # Database
+  - ~/:/host-home:rw                # Repository access
 ```
+
+## Workflow with Claude Code
+
+Claude Reviewer is designed to work seamlessly with Claude Code:
+
+1. **You make a request** to Claude for a code change
+2. **Claude creates a branch** and implements the change
+3. **Claude creates a PR** using `claude-reviewer create`
+4. **You review** in the web UI and add comments
+5. **Claude checks comments** with `claude-reviewer comments`
+6. **Claude addresses feedback** and runs `claude-reviewer update`
+7. **You approve** when satisfied
+8. **Claude merges** with `claude-reviewer merge`
+
+This keeps you in control while leveraging Claude's capabilities.
 
 ## Development
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.9+
 - Node.js 20+
-- Docker (optional, for containerized web UI)
+- Docker (for web UI)
 
-### Python CLI Development
+### Local Development
 
 ```bash
-cd claude-reviewer-cli
+# Clone the repository
+git clone https://github.com/bowlesb/claude-reviewer.git
+cd claude-reviewer
 
-# Install with dev dependencies
+# Install CLI in development mode
+cd claude-reviewer-cli
 pip install -e ".[dev]"
 
-# Run tests
+# Run CLI tests
 make test
 
-# Type checking
-make typecheck
-
-# Linting
-make lint
-
-# Format code
-make format
-
-# Run all checks
-make all
-```
-
-### Web App Development
-
-```bash
-# Install dependencies
+# Start web UI in development mode
+cd ..
 npm install
-
-# Start development server
 npm run dev
-
-# Run unit tests
-npm test
-
-# Run E2E tests
-npm run test:e2e
-
-# Build for production
-npm run build
 ```
 
 ### Project Structure
 
 ```
-claude_reviewer/
-├── claude-reviewer-cli/          # Python CLI package
+claude-reviewer/
+├── claude-reviewer-cli/      # Python CLI package
 │   ├── claude_reviewer/
-│   │   ├── cli.py               # CLI commands
-│   │   ├── database.py          # SQLite operations
-│   │   ├── git_ops.py           # Git operations
-│   │   └── models.py            # Data models
-│   ├── tests/                   # Python tests
+│   │   ├── cli.py           # CLI commands (Click)
+│   │   ├── database.py      # SQLite operations
+│   │   ├── git_ops.py       # Git operations (GitPython)
+│   │   └── models.py        # Data models
 │   └── pyproject.toml
-├── app/                         # Next.js pages
-│   ├── page.tsx                 # PR list
-│   ├── prs/[id]/page.tsx        # PR review page
-│   └── api/                     # API routes
-├── lib/                         # Shared utilities
-│   ├── database.ts              # TypeScript DB layer
-│   └── git.ts                   # Git operations
-├── components/                  # React components
-├── __tests__/                   # TypeScript tests
+├── app/                      # Next.js app router
+│   ├── page.tsx             # PR list dashboard
+│   ├── prs/[id]/page.tsx    # PR review page
+│   └── api/                 # API routes
+├── lib/
+│   └── database.ts          # TypeScript DB layer
 ├── Dockerfile
 └── docker-compose.yml
 ```
 
-## Typical Workflow
-
-1. **Create a feature branch and make changes**
-   ```bash
-   git checkout -b feature/new-thing
-   # ... make changes ...
-   git commit -m "Add new feature"
-   ```
-
-2. **Create a PR for review**
-   ```bash
-   claude-reviewer create --title "Add new feature"
-   ```
-
-3. **Review in the web UI**
-   - Open the review URL
-   - Examine the diff
-   - Add inline comments on specific lines
-   - Submit review (approve or request changes)
-
-4. **Address feedback (if changes requested)**
-   ```bash
-   # Check what needs to be fixed
-   claude-reviewer comments <id>
-
-   # Make fixes and commit
-   git commit -m "Address review feedback"
-
-   # Update the PR
-   claude-reviewer update <id>
-   ```
-
-5. **Merge when approved**
-   ```bash
-   claude-reviewer merge <id> --push
-   ```
-
 ## Troubleshooting
 
 ### "Not a git repository" error
-Make sure you're running commands from within a git repository.
 
-### "docker-compose.yml not found" error
-Either:
-- Run `claude-reviewer serve` from the claude_reviewer directory
-- Use `--dir` flag: `claude-reviewer serve --dir /path/to/claude_reviewer`
-- Set environment variable: `export CLAUDE_REVIEWER_WEB_DIR=/path/to/claude_reviewer`
+Run `claude-reviewer` commands from within a git repository.
 
-### Web UI not starting
-Check if Docker is running and port 3000 is available:
+### Web UI shows "docker-compose.yml not found"
+
 ```bash
-docker ps
-lsof -i :3000
+# Option 1: Run from the claude-reviewer directory
+cd /path/to/claude-reviewer
+claude-reviewer serve
+
+# Option 2: Specify the path
+claude-reviewer serve --dir /path/to/claude-reviewer
+
+# Option 3: Set environment variable
+export CLAUDE_REVIEWER_WEB_DIR=/path/to/claude-reviewer
 ```
 
-### Database locked
-The SQLite database uses WAL mode for concurrent access. If you see lock errors, ensure no stale processes are accessing the database.
+### Port 3000 already in use
+
+```bash
+# Check what's using the port
+lsof -i :3000
+
+# Use a different port
+claude-reviewer serve --port 3001
+```
+
+### Database locked errors
+
+The SQLite database uses WAL mode for concurrent access. If you see lock errors:
+
+```bash
+# Check for stale processes
+ps aux | grep claude-reviewer
+
+# Reset the database (warning: deletes all data)
+rm ~/.claude-reviewer/data.db
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.

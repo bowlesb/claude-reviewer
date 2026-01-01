@@ -21,8 +21,8 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine AS runner
 
-# Install runtime dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
+# Install runtime dependencies for better-sqlite3 and git for merge operations
+RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
 

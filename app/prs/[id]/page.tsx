@@ -69,6 +69,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [commentingAt, setCommentingAt] = useState<{ file: string; line: number } | null>(null);
   const [newComment, setNewComment] = useState('');
+  const [editingComment, setEditingComment] = useState<{ uuid: string; content: string } | null>(null);
   const [reviewSummary, setReviewSummary] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -103,10 +104,29 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   };
 
   const addComment = async () => {
-    if (!commentingAt || !newComment.trim()) return;
+    if (!commentingAt || !newComment.trim() || !data) return;
+
+    const tempUuid = `temp-${Date.now()}`;
+    const newCommentObj: Comment = {
+      id: Date.now(),
+      uuid: tempUuid,
+      file_path: commentingAt.file,
+      line_number: commentingAt.line,
+      content: newComment,
+      resolved: false,
+      created_at: new Date().toISOString(),
+    };
+
+    // Optimistically update local state
+    setData({
+      ...data,
+      comments: [...data.comments, newCommentObj],
+    });
+    setNewComment('');
+    setCommentingAt(null);
 
     try {
-      await fetch(`/api/prs/${id}/comments`, {
+      const res = await fetch(`/api/prs/${id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,24 +135,80 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           content: newComment,
         }),
       });
-      setNewComment('');
-      setCommentingAt(null);
-      fetchPR();
+      const result = await res.json();
+      // Update with real UUID from server
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              comments: prev.comments.map((c) => (c.uuid === tempUuid ? { ...c, uuid: result.uuid } : c)),
+            }
+          : prev
+      );
     } catch (e) {
       alert('Error adding comment');
+      // Revert on error
+      setData((prev) => (prev ? { ...prev, comments: prev.comments.filter((c) => c.uuid !== tempUuid) } : prev));
+    }
+  };
+
+  const editComment = async () => {
+    if (!editingComment || !editingComment.content.trim() || !data) return;
+
+    const originalComment = data.comments.find((c) => c.uuid === editingComment.uuid);
+
+    // Optimistically update local state
+    setData({
+      ...data,
+      comments: data.comments.map((c) =>
+        c.uuid === editingComment.uuid ? { ...c, content: editingComment.content } : c
+      ),
+    });
+    setEditingComment(null);
+
+    try {
+      await fetch(`/api/prs/${id}/comments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commentUuid: editingComment.uuid,
+          content: editingComment.content,
+        }),
+      });
+    } catch (e) {
+      alert('Error updating comment');
+      // Revert on error
+      if (originalComment) {
+        setData((prev) =>
+          prev
+            ? { ...prev, comments: prev.comments.map((c) => (c.uuid === editingComment.uuid ? originalComment : c)) }
+            : prev
+        );
+      }
     }
   };
 
   const resolveComment = async (commentUuid: string, resolved: boolean) => {
+    if (!data) return;
+
+    // Optimistically update local state
+    setData({
+      ...data,
+      comments: data.comments.map((c) => (c.uuid === commentUuid ? { ...c, resolved } : c)),
+    });
+
     try {
       await fetch(`/api/prs/${id}/comments`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commentUuid, resolved }),
       });
-      fetchPR();
     } catch (e) {
       alert('Error updating comment');
+      // Revert on error
+      setData((prev) =>
+        prev ? { ...prev, comments: prev.comments.map((c) => (c.uuid === commentUuid ? { ...c, resolved: !resolved } : c)) } : prev
+      );
     }
   };
 
@@ -153,28 +229,6 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
     }
   };
 
-  const mergePR = async () => {
-    if (!confirm('Merge this PR?')) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/prs/${id}/merge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ push: true }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert(result.message);
-        fetchPR();
-      } else {
-        alert(`Merge failed: ${result.error}`);
-      }
-    } catch (e) {
-      alert('Error merging PR');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   // Parse diff into file chunks
   const parseFileDiff = (diff: string, filePath: string): string[] => {
@@ -305,10 +359,10 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                 </button>
               </div>
               {pr.status === 'approved' && (
-                <button className="btn-merge" onClick={mergePR} disabled={submitting}>
-                  <GitMerge size={16} />
-                  Merge PR
-                </button>
+                <div className="approved-notice">
+                  <CheckCircle size={16} />
+                  Approved - Ready for merge
+                </div>
               )}
             </div>
           )}
@@ -389,13 +443,38 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                           {/* Inline comments */}
                           {lineComments.map((c) => (
                             <div key={c.uuid} className={`inline-comment ${c.resolved ? 'resolved' : ''}`}>
-                              <div className="comment-content">{c.content}</div>
-                              <button
-                                className="resolve-btn"
-                                onClick={() => resolveComment(c.uuid, !c.resolved)}
-                              >
-                                {c.resolved ? 'Unresolve' : 'Resolve'}
-                              </button>
+                              {editingComment?.uuid === c.uuid ? (
+                                <div className="edit-comment-form">
+                                  <textarea
+                                    autoFocus
+                                    value={editingComment.content}
+                                    onChange={(e) => setEditingComment({ ...editingComment, content: e.target.value })}
+                                    rows={3}
+                                  />
+                                  <div className="comment-actions">
+                                    <button onClick={editComment}>Save</button>
+                                    <button className="cancel" onClick={() => setEditingComment(null)}>Cancel</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="comment-content">{c.content}</div>
+                                  <div className="comment-buttons">
+                                    <button
+                                      className="edit-btn"
+                                      onClick={() => setEditingComment({ uuid: c.uuid, content: c.content })}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="resolve-btn"
+                                      onClick={() => resolveComment(c.uuid, !c.resolved)}
+                                    >
+                                      {c.resolved ? 'Unresolve' : 'Resolve'}
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           ))}
 
@@ -586,8 +665,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         }
 
         .btn-approve,
-        .btn-request-changes,
-        .btn-merge {
+        .btn-request-changes {
           flex: 1;
           display: flex;
           align-items: center;
@@ -611,11 +689,17 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           border: 1px solid #30363d;
         }
 
-        .btn-merge {
-          width: 100%;
+        .approved-notice {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
           margin-top: 0.75rem;
-          background: #8957e5;
-          color: white;
+          padding: 0.5rem;
+          background: rgba(35, 134, 54, 0.15);
+          border: 1px solid #238636;
+          border-radius: 6px;
+          color: #3fb950;
+          font-size: 0.85rem;
         }
 
         .comment-count {
@@ -734,6 +818,12 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           margin-bottom: 0.5rem;
         }
 
+        .comment-buttons {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .edit-btn,
         .resolve-btn {
           font-size: 0.75rem;
           padding: 0.25rem 0.5rem;
@@ -742,6 +832,27 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           color: #8b949e;
           border-radius: 4px;
           cursor: pointer;
+        }
+
+        .edit-btn:hover,
+        .resolve-btn:hover {
+          background: #30363d;
+          color: #c9d1d9;
+        }
+
+        .edit-comment-form {
+          width: 100%;
+        }
+
+        .edit-comment-form textarea {
+          width: 100%;
+          padding: 0.5rem;
+          border: 1px solid #30363d;
+          border-radius: 4px;
+          background: #161b22;
+          color: #c9d1d9;
+          resize: vertical;
+          margin-bottom: 0.5rem;
         }
 
         .new-comment-form {

@@ -359,6 +359,12 @@ export function resolveComment(commentUuid: string, resolved: boolean = true): b
   return result.changes > 0;
 }
 
+export function updateCommentContent(commentUuid: string, content: string): boolean {
+  const db = getDatabase();
+  const result = db.prepare('UPDATE comments SET content = ? WHERE uuid = ?').run(content, commentUuid);
+  return result.changes > 0;
+}
+
 export function deleteComment(commentUuid: string): boolean {
   const db = getDatabase();
   const result = db.prepare('DELETE FROM comments WHERE uuid = ?').run(commentUuid);
