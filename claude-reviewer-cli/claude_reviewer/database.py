@@ -102,9 +102,13 @@ def get_connection(db_path: Path | None = None) -> Generator[sqlite3.Connection,
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA synchronous = NORMAL")
     try:
         yield conn
         conn.commit()
+        # Checkpoint WAL to ensure data is written to main db file
+        # This prevents corruption when other processes read the database
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
     except Exception:
         conn.rollback()
         raise
