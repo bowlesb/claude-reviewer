@@ -36,16 +36,17 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
-[project.urls]
-Homepage = "https://github.com/benbowles/claude-reviewer"
-Documentation = "https://github.com/benbowles/claude-reviewer#readme"
-Repository = "https://github.com/benbowles/claude-reviewer"
-Issues = "https://github.com/benbowles/claude-reviewer/issues"
 dependencies = [
     "click>=8.0.0",
     "gitpython>=3.1.0",
     "rich>=13.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bowlesb/claude-reviewer"
+Documentation = "https://github.com/bowlesb/claude-reviewer#readme"
+Repository = "https://github.com/bowlesb/claude-reviewer"
+Issues = "https://github.com/bowlesb/claude-reviewer/issues"
 
 [project.scripts]
 claude-reviewer = "claude_reviewer.cli:main"
