@@ -66,22 +66,19 @@ def create(
             possible_defaults = ["main", "master", "trunk", "development"]
             
             # 1. Try to get semantic default from remote
-            try:
-                # This is a bit hacky parsing but works for standard git output
-                remote_info = subprocess.run(
-                    ["git", "remote", "show", "origin"], 
-                    cwd=repo_path, 
-                    capture_output=True, 
-                    text=True
-                ).stdout
-                for line in remote_info.split("\n"):
-                    if "HEAD branch:" in line:
-                        remote_default = line.split(":")[1].strip()
-                        if remote_default:
-                            base = remote_default
-                            break
-            except Exception:
-                pass
+            remote_info = subprocess.run(
+                ["git", "remote", "show", "origin"], 
+                cwd=repo_path, 
+                capture_output=True, 
+                text=True,
+                check=False  # Don't raise on error, just continue to next method
+            ).stdout
+            for line in remote_info.split("\n"):
+                if "HEAD branch:" in line:
+                    remote_default = line.split(":")[1].strip()
+                    if remote_default:
+                        base = remote_default
+                        break
 
             # 2. If remote detection failed, check local branches for common names
             if not base:
@@ -104,12 +101,7 @@ def create(
             sys.exit(1)
 
         # Get commit SHAs
-        try:
-            base_commit = git.get_commit_sha(base)
-        except Exception:
-            console.print(f"[red]Error: Base branch '{base}' not found[/red]")
-            sys.exit(1)
-
+        base_commit = git.get_commit_sha(base)
         head_commit = git.get_commit_sha(head_ref)
 
         # Get diff
@@ -238,20 +230,23 @@ def list_prs(repo: str | None, status: str | None, limit: int, show_all: bool) -
     if repo:
         repo_path = str(Path(repo).resolve())
     elif not show_all:
+        # Try to detect current git repo scope
+        cwd = Path.cwd()
+        # Use simple git check without invoking subprocess if possible or just let it fail
+        # But we need to be safe if git is not installed or not in repo
         try:
-            # Try to detect current git repo scope
-            cwd = Path.cwd()
             git_root = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
                 cwd=cwd,
                 capture_output=True,
-                text=True
+                text=True,
+                check=False
             ).stdout.strip()
             
             if git_root:
                 repo_path = str(Path(git_root).resolve())
-        except Exception:
-            # Not in a git repo or git not found, fallback to showing all (or just don't filter)
+        except FileNotFoundError:
+            # Git executable not found
             pass
 
     prs = db.list_prs(repo_path=repo_path, status=status_filter, limit=limit)
@@ -350,31 +345,26 @@ def update(pr_id: str, repo: str | None) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
-    try:
-        repo_path = repo or pr.repo_path
-        git = GitOps(repo_path)
+    repo_path = repo or pr.repo_path
+    git = GitOps(repo_path)
 
-        # Get new diff
-        diff = git.get_diff(pr.base_ref, pr.head_ref)
-        head_commit = git.get_commit_sha(pr.head_ref)
+    # Get new diff
+    diff = git.get_diff(pr.base_ref, pr.head_ref)
+    head_commit = git.get_commit_sha(pr.head_ref)
 
-        # Update in database
-        new_revision = db.update_pr_diff(pr_id, diff, head_commit)
+    # Update in database
+    new_revision = db.update_pr_diff(pr_id, diff, head_commit)
 
-        # Reset status to pending for re-review
-        db.update_pr_status(pr_id, PRStatus.PENDING)
+    # Reset status to pending for re-review
+    db.update_pr_status(pr_id, PRStatus.PENDING)
 
-        console.print(
-            Panel(
-                f"[green]PR #{pr_id} updated to revision {new_revision}[/green]\n\n"
-                f"Status reset to [yellow]pending[/yellow] for re-review",
-                title="PR Updated",
-            )
+    console.print(
+        Panel(
+            f"[green]PR #{pr_id} updated to revision {new_revision}[/green]\n\n"
+            f"Status reset to [yellow]pending[/yellow] for re-review",
+            title="PR Updated",
         )
-
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    )
 
 
 @main.command()
@@ -396,52 +386,47 @@ def merge(pr_id: str, push: bool, delete_branch: bool, repo: str | None) -> None
         console.print("[dim]Only approved PRs can be merged[/dim]")
         sys.exit(1)
 
-    try:
-        repo_path = repo or pr.repo_path
-        git = GitOps(repo_path)
+    repo_path = repo or pr.repo_path
+    git = GitOps(repo_path)
 
-        # Check for uncommitted changes
-        if git.has_uncommitted_changes():
-            console.print("[red]Error: Repository has uncommitted changes[/red]")
-            console.print("[dim]Please commit or stash changes before merging[/dim]")
-            sys.exit(1)
-
-        # Perform merge
-        merge_result = git.merge(pr.head_ref, pr.base_ref)
-
-        if not merge_result["success"]:
-            console.print(f"[red]Merge failed: {merge_result['message']}[/red]")
-            sys.exit(1)
-
-        console.print(f"[green]{merge_result['message']}[/green]")
-
-        # Push if requested
-        if push:
-            push_result = git.push()
-            if push_result["success"]:
-                console.print(f"[green]{push_result['message']}[/green]")
-            else:
-                console.print(f"[yellow]Warning: Push failed: {push_result['message']}[/yellow]")
-
-        # Delete source branch if requested
-        if delete_branch:
-            delete_result = git.delete_branch(pr.head_ref)
-            if delete_result["success"]:
-                console.print(f"[dim]{delete_result['message']}[/dim]")
-
-        # Update PR status
-        db.update_pr_status(pr_id, PRStatus.MERGED)
-
-        console.print(
-            Panel(
-                f"[green]PR #{pr_id} merged successfully![/green]",
-                title="Merge Complete",
-            )
-        )
-
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+    # Check for uncommitted changes
+    if git.has_uncommitted_changes():
+        console.print("[red]Error: Repository has uncommitted changes[/red]")
+        console.print("[dim]Please commit or stash changes before merging[/dim]")
         sys.exit(1)
+
+    # Perform merge
+    merge_result = git.merge(pr.head_ref, pr.base_ref)
+
+    if not merge_result["success"]:
+        console.print(f"[red]Merge failed: {merge_result['message']}[/red]")
+        sys.exit(1)
+
+    console.print(f"[green]{merge_result['message']}[/green]")
+
+    # Push if requested
+    if push:
+        push_result = git.push()
+        if push_result["success"]:
+            console.print(f"[green]{push_result['message']}[/green]")
+        else:
+            console.print(f"[yellow]Warning: Push failed: {push_result['message']}[/yellow]")
+
+    # Delete source branch if requested
+    if delete_branch:
+        delete_result = git.delete_branch(pr.head_ref)
+        if delete_result["success"]:
+            console.print(f"[dim]{delete_result['message']}[/dim]")
+
+    # Update PR status
+    db.update_pr_status(pr_id, PRStatus.MERGED)
+
+    console.print(
+        Panel(
+            f"[green]PR #{pr_id} merged successfully![/green]",
+            title="Merge Complete",
+        )
+    )
 
 
 @main.command()
