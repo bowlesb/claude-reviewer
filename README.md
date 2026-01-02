@@ -1,8 +1,11 @@
 # Claude Reviewer
 
 [![PyPI version](https://badge.fury.io/py/claude-reviewer.svg)](https://badge.fury.io/py/claude-reviewer)
+[![Docker Pulls](https://img.shields.io/docker/pulls/bowles/claude-reviewer)](https://hub.docker.com/r/bowles/claude-reviewer)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Links:** [GitHub Repository](https://github.com/bowlesb/claude-reviewer) | [PyPI Package](https://pypi.org/project/claude-reviewer/) | [Docker Hub Image](https://hub.docker.com/r/bowles/claude-reviewer)
 
 A local PR review system designed for AI-assisted development with Claude Code. Create pull requests, review diffs with inline comments, and manage code reviews—all without leaving your local environment or pushing to GitHub.
 
