@@ -435,15 +435,52 @@ CONTAINER_NAME = "claude-reviewer-web"
 COMPOSE_PROJECT_NAME = "claude-reviewer"
 
 
+def verify_docker_container(container_name: str) -> bool:
+    """Check if a container is running."""
+    result = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def run_local_server(port: int, web_dir: Path) -> None:
+    """Run the web server locally using npm."""
+    console.print(f"[bold]Starting local web server on port {port}...[/bold]")
+    console.print(f"[dim]Working directory: {web_dir}[/dim]")
+
+    # Check for node_modules
+    if not (web_dir / "node_modules").exists():
+        console.print("[yellow]Installing dependencies...[/yellow]")
+        subprocess.run(["npm", "ci"], cwd=web_dir, check=True)
+
+    # Build if needed (simple check for .next)
+    if not (web_dir / ".next").exists():
+        console.print("[yellow]Building application...[/yellow]")
+        subprocess.run(["npm", "run", "build"], cwd=web_dir, check=True)
+
+    env = os.environ.copy()
+    env["PORT"] = str(port)
+
+    console.print(f"[green]Starting server at http://localhost:{port}[/green]")
+    try:
+        subprocess.run(["npm", "run", "start"], cwd=web_dir, env=env)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Server stopped[/yellow]")
+
+
 @main.command()
 @click.option("--port", "-p", default=3456, help="Port for web UI (default: 3456)")
-@click.option("--detach/--no-detach", "-d", default=True, help="Run in background")
+@click.option("--detach/--no-detach", "-d", default=True, help="Run in background (Docker only)")
 @click.option("--dev", is_flag=True, help="Use local docker-compose for development")
 @click.option("--pull/--no-pull", default=True, help="Pull latest image before starting")
-def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
+@click.option("--local", is_flag=True, help="Run locally using npm (requires source)")
+def serve(port: int, detach: bool, dev: bool, pull: bool, local: bool) -> None:
     """Start the web UI server.
 
     By default, pulls and runs the Docker image from Docker Hub.
+    Use --local to run with npm start (requires source code).
     Use --dev for local development with docker-compose.
     """
     # Check if port is already in use
@@ -452,11 +489,35 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
         console.print("[dim]Try a different port: claude-reviewer serve --port 3457[/dim]")
         sys.exit(1)
 
+    # Handle local mode first
+    if local:
+        web_dir = find_web_dir()
+        if not web_dir:
+            console.print("[red]Error: Local mode requires claude-reviewer source[/red]")
+            # Fallback check
+            cwd = Path.cwd()
+            if (cwd / "package.json").exists() and (cwd / "next.config.ts").exists():
+                web_dir = cwd
+            else:
+                sys.exit(1)
+
+        run_local_server(port, web_dir)
+        return
+
     # Check if docker is available
     docker_check = subprocess.run(["docker", "info"], capture_output=True, text=True)
     if docker_check.returncode != 0:
-        console.print("[red]Error: Docker is not running or not installed[/red]")
-        console.print("[dim]Please install Docker: https://docs.docker.com/get-docker/[/dim]")
+        console.print("[yellow]Warning: Docker is not running or not installed[/yellow]")
+
+        # Try finding web dir for fallback
+        web_dir = find_web_dir()
+        if web_dir and click.confirm("Do you want to run locally with npm instead?"):
+            run_local_server(port, web_dir)
+            return
+
+        console.print(
+            "[red]Error: Docker required. Install Docker or run from source with --local[/red]"
+        )
         sys.exit(1)
 
     # Development mode: use docker-compose
@@ -548,15 +609,26 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
     run_result = subprocess.run(run_cmd, capture_output=True, text=True)
 
     if run_result.returncode == 0:
-        if detach:
-            console.print(
-                Panel(
-                    f"[green]Web UI started successfully![/green]\n\n"
-                    f"[bold]URL:[/bold] http://localhost:{port}\n\n"
-                    f"[dim]Stop with: claude-reviewer stop[/dim]",
-                    title="Claude Reviewer",
+        # Verify it's actually running
+        time.sleep(1)  # Give it a moment to potentially crash
+        if verify_docker_container(CONTAINER_NAME):
+            if detach:
+                console.print(
+                    Panel(
+                        f"[green]Web UI started successfully![/green]\n\n"
+                        f"[bold]URL:[/bold] http://localhost:{port}\n\n"
+                        f"[dim]Stop with: claude-reviewer stop[/dim]",
+                        title="Claude Reviewer",
+                    )
                 )
+        else:
+            # It crashed immediately
+            console.print("[red]Error: Container started but exited immediately[/red]")
+            logs = subprocess.run(
+                ["docker", "logs", CONTAINER_NAME], capture_output=True, text=True
             )
+            console.print(f"[dim]Logs:\n{logs.stderr}\n{logs.stdout}[/dim]")
+            sys.exit(1)
     else:
         console.print("[red]Failed to start web UI[/red]")
         console.print(f"[dim]{run_result.stderr}[/dim]")

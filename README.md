@@ -27,15 +27,23 @@ pip install claude-reviewer
 
 ### Web UI (Optional)
 
-The web UI runs via Docker and is started from the CLI:
+The web UI runs via Docker (recommended) or locally with Node.js.
+
+#### Option A: Docker (Easiest)
+```bash
+claude-reviewer serve
+```
+
+#### Option B: Local Node.js (No Docker)
+Requires `npm` and the source code.
 
 ```bash
-# Clone the repo for the web UI
+# Clone the repo if you haven't already
 git clone https://github.com/bowlesb/claude-reviewer.git
 cd claude-reviewer
 
-# Start the web UI
-claude-reviewer serve
+# Run with local flag
+claude-reviewer serve --local
 ```
 
 ## Quick Start
@@ -126,6 +134,7 @@ claude-reviewer merge a1b2c3d4
 | `claude-reviewer update <id>` | Update PR diff after making changes |
 | `claude-reviewer merge <id>` | Merge an approved PR |
 | `claude-reviewer serve` | Start the web UI (Docker) |
+| `claude-reviewer serve --local` | Start the web UI locally (npm) |
 | `claude-reviewer stop` | Stop the web UI |
 
 ### Common Options
@@ -281,6 +290,19 @@ ps aux | grep claude-reviewer
 # Reset the database (warning: deletes all data)
 rm ~/.claude-reviewer/data.db
 ```
+
+### Docker "authorization failed" or "repository does not exist"
+
+If you see these errors when running `serve`:
+1.  Ensure you have Docker installed and running.
+2.  The image `bowlesb/claude-reviewer` is public, but if you have issues, try logging out:
+    ```bash
+    docker logout
+    ```
+3.  If you are trying to push/build custom images, ensure you are logged in:
+    ```bash
+    docker login
+    ```
 
 ## Contributing
 
