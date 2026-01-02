@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TypedDict
 
@@ -131,10 +132,9 @@ class GitOps:
             }
         except GitCommandError as e:
             # Try to abort merge if it failed
-            try:
+            # Try to abort merge if it failed
+            with contextlib.suppress(GitCommandError):
                 self.repo.git.merge("--abort")
-            except GitCommandError:
-                pass
             return {
                 "success": False,
                 "message": str(e),

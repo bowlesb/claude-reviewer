@@ -297,9 +297,7 @@ class TestReviews:
             diff="d",
         )
 
-        result = db.submit_review(
-            uuid, ReviewAction.REQUEST_CHANGES, summary="Needs work"
-        )
+        result = db.submit_review(uuid, ReviewAction.REQUEST_CHANGES, summary="Needs work")
         assert result is True
 
         pr = db.get_pr_by_uuid(uuid)

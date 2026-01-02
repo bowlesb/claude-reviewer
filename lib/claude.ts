@@ -40,10 +40,16 @@ async function runClaude(prompt: string): Promise<string> {
     });
 }
 
+interface FixComment {
+    fileName: string;
+    lineNumber: number;
+    text: string;
+}
+
 export async function requestFixes(params: {
     repoInfo: string;
     diff: string;
-    comments: any[];
+    comments: FixComment[];
 }) {
     const { diff, comments } = params;
 

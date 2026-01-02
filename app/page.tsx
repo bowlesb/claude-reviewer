@@ -102,7 +102,7 @@ export default function Home() {
           <GitPullRequest size={48} strokeWidth={1} />
           <h2>No pull requests yet</h2>
           <p>Create a PR using the CLI:</p>
-          <code>claude-reviewer create --title "Your PR title"</code>
+          <code>claude-reviewer create --title &quot;Your PR title&quot;</code>
         </div>
       ) : (
         <div className="pr-list">

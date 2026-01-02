@@ -193,7 +193,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
     for (const line of lines) {
       if (line.startsWith('diff --git') || line.startsWith('index ') ||
-          line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+        line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
         continue;
       }
       if (line.startsWith('-')) continue; // Skip deleted lines
@@ -306,11 +306,11 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       setData((prev) =>
         prev
           ? {
-              ...prev,
-              comments: prev.comments.map((c) =>
-                c.comment.uuid === tempUuid ? { ...c, comment: { ...c.comment, uuid: result.uuid } } : c
-              ),
-            }
+            ...prev,
+            comments: prev.comments.map((c) =>
+              c.comment.uuid === tempUuid ? { ...c, comment: { ...c.comment, uuid: result.uuid } } : c
+            ),
+          }
           : prev
       );
     } catch (e) {
@@ -396,18 +396,18 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       setData((prev) =>
         prev
           ? {
-              ...prev,
-              comments: prev.comments.map((c) =>
-                c.comment.uuid === commentUuid
-                  ? {
-                      ...c,
-                      replies: c.replies.map((r) =>
-                        r.uuid === tempReply.uuid ? { ...r, uuid: result.uuid } : r
-                      ),
-                    }
-                  : c
-              ),
-            }
+            ...prev,
+            comments: prev.comments.map((c) =>
+              c.comment.uuid === commentUuid
+                ? {
+                  ...c,
+                  replies: c.replies.map((r) =>
+                    r.uuid === tempReply.uuid ? { ...r, uuid: result.uuid } : r
+                  ),
+                }
+                : c
+            ),
+          }
           : prev
       );
     } catch (e) {
@@ -416,13 +416,13 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       setData((prev) =>
         prev
           ? {
-              ...prev,
-              comments: prev.comments.map((c) =>
-                c.comment.uuid === commentUuid
-                  ? { ...c, replies: c.replies.filter((r) => r.uuid !== tempReply.uuid) }
-                  : c
-              ),
-            }
+            ...prev,
+            comments: prev.comments.map((c) =>
+              c.comment.uuid === commentUuid
+                ? { ...c, replies: c.replies.filter((r) => r.uuid !== tempReply.uuid) }
+                : c
+            ),
+          }
           : prev
       );
     }
@@ -451,11 +451,11 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       setData((prev) =>
         prev
           ? {
-              ...prev,
-              comments: prev.comments.map((c) =>
-                c.comment.uuid === commentUuid ? { ...c, comment: { ...c.comment, resolved: !resolved } } : c
-              ),
-            }
+            ...prev,
+            comments: prev.comments.map((c) =>
+              c.comment.uuid === commentUuid ? { ...c, comment: { ...c.comment, resolved: !resolved } } : c
+            ),
+          }
           : prev
       );
     }
@@ -633,7 +633,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
             const fileComments = getFileComments(file.path);
             const diffLines = parseFileDiff(diff, file.path);
 
-            let lineNum = 0;
+
 
             const isPreview = previewMode.has(file.path);
             const isMd = isMarkdownFile(file.path);
@@ -716,10 +716,10 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                         const lineClasses = line.startsWith('+')
                           ? 'line-add'
                           : line.startsWith('-')
-                          ? 'line-del'
-                          : line.startsWith('@@')
-                          ? 'line-hunk'
-                          : 'line-ctx';
+                            ? 'line-del'
+                            : line.startsWith('@@')
+                              ? 'line-hunk'
+                              : 'line-ctx';
 
                         // Find comments for this line (only for new/context lines)
                         const lineComments = fileComments.filter(
@@ -751,99 +751,99 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                               </span>
                             </div>
 
-                          {/* Inline comments with replies */}
-                          {lineComments.map(({ comment: c, replies }) => (
-                            <div key={c.uuid} className={`inline-comment ${c.resolved ? 'resolved' : ''}`}>
-                              {editingComment?.uuid === c.uuid ? (
-                                <div className="edit-comment-form">
-                                  <textarea
-                                    autoFocus
-                                    value={editingComment.content}
-                                    onChange={(e) => setEditingComment({ ...editingComment, content: e.target.value })}
-                                    rows={3}
-                                  />
-                                  <div className="comment-actions">
-                                    <button onClick={editComment}>Save</button>
-                                    <button className="cancel" onClick={() => setEditingComment(null)}>Cancel</button>
+                            {/* Inline comments with replies */}
+                            {lineComments.map(({ comment: c, replies }) => (
+                              <div key={c.uuid} className={`inline-comment ${c.resolved ? 'resolved' : ''}`}>
+                                {editingComment?.uuid === c.uuid ? (
+                                  <div className="edit-comment-form">
+                                    <textarea
+                                      autoFocus
+                                      value={editingComment.content}
+                                      onChange={(e) => setEditingComment({ ...editingComment, content: e.target.value })}
+                                      rows={3}
+                                    />
+                                    <div className="comment-actions">
+                                      <button onClick={editComment}>Save</button>
+                                      <button className="cancel" onClick={() => setEditingComment(null)}>Cancel</button>
+                                    </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="comment-content">{c.content}</div>
-                                  <div className="comment-buttons">
-                                    {replies.length === 0 && (
+                                ) : (
+                                  <>
+                                    <div className="comment-content">{c.content}</div>
+                                    <div className="comment-buttons">
+                                      {replies.length === 0 && (
+                                        <button
+                                          className="edit-btn"
+                                          onClick={() => setEditingComment({ uuid: c.uuid, content: c.content })}
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
                                       <button
-                                        className="edit-btn"
-                                        onClick={() => setEditingComment({ uuid: c.uuid, content: c.content })}
+                                        className="resolve-btn"
+                                        onClick={() => resolveComment(c.uuid, !c.resolved)}
                                       >
-                                        Edit
+                                        {c.resolved ? 'Unresolve' : 'Resolve'}
+                                      </button>
+                                    </div>
+                                    {/* Replies */}
+                                    {replies.length > 0 && (
+                                      <div className="comment-replies">
+                                        {replies.map((r) => (
+                                          <div key={r.uuid} className={`comment-reply ${r.author === 'claude' ? 'reply-claude' : 'reply-ben'}`}>
+                                            <span className="reply-author">{r.author}:</span>
+                                            <span className="reply-content">{r.content}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Reply form */}
+                                    {replyingTo === c.uuid ? (
+                                      <div className="reply-form">
+                                        <textarea
+                                          autoFocus
+                                          placeholder="Write a reply..."
+                                          value={replyContent}
+                                          onChange={(e) => setReplyContent(e.target.value)}
+                                          rows={2}
+                                        />
+                                        <div className="comment-actions">
+                                          <button onClick={() => addReply(c.uuid)}>Reply</button>
+                                          <button className="cancel" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Cancel</button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button className="reply-btn" onClick={() => setReplyingTo(c.uuid)}>
+                                        Reply
                                       </button>
                                     )}
-                                    <button
-                                      className="resolve-btn"
-                                      onClick={() => resolveComment(c.uuid, !c.resolved)}
-                                    >
-                                      {c.resolved ? 'Unresolve' : 'Resolve'}
-                                    </button>
-                                  </div>
-                                  {/* Replies */}
-                                  {replies.length > 0 && (
-                                    <div className="comment-replies">
-                                      {replies.map((r) => (
-                                        <div key={r.uuid} className={`comment-reply ${r.author === 'claude' ? 'reply-claude' : 'reply-ben'}`}>
-                                          <span className="reply-author">{r.author}:</span>
-                                          <span className="reply-content">{r.content}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {/* Reply form */}
-                                  {replyingTo === c.uuid ? (
-                                    <div className="reply-form">
-                                      <textarea
-                                        autoFocus
-                                        placeholder="Write a reply..."
-                                        value={replyContent}
-                                        onChange={(e) => setReplyContent(e.target.value)}
-                                        rows={2}
-                                      />
-                                      <div className="comment-actions">
-                                        <button onClick={() => addReply(c.uuid)}>Reply</button>
-                                        <button className="cancel" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Cancel</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button className="reply-btn" onClick={() => setReplyingTo(c.uuid)}>
-                                      Reply
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* New comment form */}
-                          {commentingAt?.file === file.path && commentingAt?.line === currentLine && (
-                            <div className="new-comment-form">
-                              <textarea
-                                autoFocus
-                                placeholder="Write a comment..."
-                                value={newComment}
-                                onChange={(e) => setNewComment(e.target.value)}
-                                rows={3}
-                              />
-                              <div className="comment-actions">
-                                <button onClick={addComment}>Add Comment</button>
-                                <button className="cancel" onClick={() => setCommentingAt(null)}>
-                                  Cancel
-                                </button>
+                                  </>
+                                )}
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
+                            ))}
+
+                            {/* New comment form */}
+                            {commentingAt?.file === file.path && commentingAt?.line === currentLine && (
+                              <div className="new-comment-form">
+                                <textarea
+                                  autoFocus
+                                  placeholder="Write a comment..."
+                                  value={newComment}
+                                  onChange={(e) => setNewComment(e.target.value)}
+                                  rows={3}
+                                />
+                                <div className="comment-actions">
+                                  <button onClick={addComment}>Add Comment</button>
+                                  <button className="cancel" onClick={() => setCommentingAt(null)}>
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>

@@ -11,8 +11,14 @@ interface ReviewPageProps {
     diff: string;
 }
 
+interface Comment {
+    id: string;
+    lineNumber: number;
+    text: string;
+}
+
 export default function ReviewPage({ repoPath, baseRef, headRef, diff }: ReviewPageProps) {
-    const [comments, setComments] = useState<Record<number, any[]>>({});
+    const [comments, setComments] = useState<Record<number, Comment[]>>({});
     const [patch, setPatch] = useState<string | null>(null);
     const [isRequesting, setIsRequesting] = useState(false);
     const [isApplying, setIsApplying] = useState(false);

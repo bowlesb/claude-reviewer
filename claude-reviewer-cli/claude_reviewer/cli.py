@@ -120,11 +120,11 @@ def status(pr_id: str) -> None:
 
     # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "#d29922",          # GitHub yellow
-        PRStatus.APPROVED: "#3fb950",         # GitHub green
-        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
-        PRStatus.MERGED: "#a371f7",           # GitHub purple
-        PRStatus.CLOSED: "#8b949e",           # GitHub gray
+        PRStatus.PENDING: "#d29922",  # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",  # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149",  # GitHub red
+        PRStatus.MERGED: "#a371f7",  # GitHub purple
+        PRStatus.CLOSED: "#8b949e",  # GitHub gray
     }
 
     color = status_colors.get(pr.status, "white")
@@ -156,10 +156,7 @@ def comments(pr_id: str, output_format: str, unresolved: bool) -> None:
                     "line": c.line_number,
                     "text": c.content,
                     "resolved": c.resolved,
-                    "replies": [
-                        {"author": r.author, "text": r.content}
-                        for r in replies
-                    ],
+                    "replies": [{"author": r.author, "text": r.content} for r in replies],
                 }
                 for c, replies in comments_with_replies
             ],
@@ -210,11 +207,11 @@ def list_prs(repo: str | None, status: str | None, limit: int) -> None:
 
     # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "#d29922",          # GitHub yellow
-        PRStatus.APPROVED: "#3fb950",         # GitHub green
-        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
-        PRStatus.MERGED: "#a371f7",           # GitHub purple
-        PRStatus.CLOSED: "#8b949e",           # GitHub gray
+        PRStatus.PENDING: "#d29922",  # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",  # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149",  # GitHub red
+        PRStatus.MERGED: "#a371f7",  # GitHub purple
+        PRStatus.CLOSED: "#8b949e",  # GitHub gray
     }
 
     for pr in prs:
@@ -347,11 +344,11 @@ def show(pr_id: str) -> None:
 
     # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "#d29922",          # GitHub yellow
-        PRStatus.APPROVED: "#3fb950",         # GitHub green
-        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
-        PRStatus.MERGED: "#a371f7",           # GitHub purple
-        PRStatus.CLOSED: "#8b949e",           # GitHub gray
+        PRStatus.PENDING: "#d29922",  # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",  # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149",  # GitHub red
+        PRStatus.MERGED: "#a371f7",  # GitHub purple
+        PRStatus.CLOSED: "#8b949e",  # GitHub gray
     }
     color = status_colors.get(pr.status, "white")
 
@@ -390,7 +387,7 @@ def is_port_in_use(port: int) -> bool:
     """Check if a port is already in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
-        return s.connect_ex(('localhost', port)) == 0
+        return s.connect_ex(("localhost", port)) == 0
 
 
 def find_web_dir() -> Path | None:
@@ -452,13 +449,11 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
     # Check if port is already in use
     if is_port_in_use(port):
         console.print(f"[red]Error: Port {port} is already in use[/red]")
-        console.print(f"[dim]Try a different port: claude-reviewer serve --port 3457[/dim]")
+        console.print("[dim]Try a different port: claude-reviewer serve --port 3457[/dim]")
         sys.exit(1)
 
     # Check if docker is available
-    docker_check = subprocess.run(
-        ["docker", "info"], capture_output=True, text=True
-    )
+    docker_check = subprocess.run(["docker", "info"], capture_output=True, text=True)
     if docker_check.returncode != 0:
         console.print("[red]Error: Docker is not running or not installed[/red]")
         console.print("[dim]Please install Docker: https://docs.docker.com/get-docker/[/dim]")
@@ -522,7 +517,7 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
             text=True,
         )
         if pull_result.returncode != 0:
-            console.print(f"[yellow]Warning: Could not pull latest image[/yellow]")
+            console.print("[yellow]Warning: Could not pull latest image[/yellow]")
             console.print(f"[dim]{pull_result.stderr}[/dim]")
 
     # Ensure data directory exists
@@ -531,12 +526,18 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
 
     # Run the container
     run_cmd = [
-        "docker", "run",
-        "--name", CONTAINER_NAME,
-        "-p", f"{port}:3000",
-        "-v", f"{data_dir}:/data",
-        "-v", f"{Path.home()}:/host-home:ro",
-        "-e", "DATABASE_PATH=/data/data.db",
+        "docker",
+        "run",
+        "--name",
+        CONTAINER_NAME,
+        "-p",
+        f"{port}:3000",
+        "-v",
+        f"{data_dir}:/data",
+        "-v",
+        f"{Path.home()}:/host-home:ro",
+        "-e",
+        "DATABASE_PATH=/data/data.db",
     ]
 
     if detach:
@@ -544,9 +545,9 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
 
     run_cmd.append(DOCKER_IMAGE)
 
-    result = subprocess.run(run_cmd, capture_output=True, text=True)
+    run_result = subprocess.run(run_cmd, capture_output=True, text=True)
 
-    if result.returncode == 0:
+    if run_result.returncode == 0:
         if detach:
             console.print(
                 Panel(
@@ -558,7 +559,7 @@ def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
             )
     else:
         console.print("[red]Failed to start web UI[/red]")
-        console.print(f"[dim]{result.stderr}[/dim]")
+        console.print(f"[dim]{run_result.stderr}[/dim]")
         sys.exit(1)
 
 
@@ -694,13 +695,15 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
                 if until == "any_change":
                     if current_status != initial_status or pr.updated_at != initial_updated:
                         live.stop()
-                        console.print(f"[green]✓ Change detected![/green]")
+                        console.print("[green]✓ Change detected![/green]")
                         console.print(f"Status: [bold]{current_status}[/bold]")
 
                         # Show new comments if any
                         comments_list = db.get_comments(pr_id, unresolved_only=True)
                         if comments_list:
-                            console.print(f"\n[bold]Unresolved comments ({len(comments_list)}):[/bold]")
+                            console.print(
+                                f"\n[bold]Unresolved comments ({len(comments_list)}):[/bold]"
+                            )
                             for c in comments_list:
                                 console.print(
                                     f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
@@ -717,7 +720,7 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
                             # Show the comments
                             comments_list = db.get_comments(pr_id, unresolved_only=True)
                             if comments_list:
-                                console.print(f"\n[bold]Review comments:[/bold]")
+                                console.print("\n[bold]Review comments:[/bold]")
                                 for c in comments_list:
                                     console.print(
                                         f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
@@ -741,7 +744,7 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
                             # Show the comments
                             comments_list = db.get_comments(pr_id, unresolved_only=True)
                             if comments_list:
-                                console.print(f"\n[bold]Review comments:[/bold]")
+                                console.print("\n[bold]Review comments:[/bold]")
                                 for c in comments_list:
                                     console.print(
                                         f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 import uuid as uuid_lib
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from .models import Comment, CommentReply, PRStatus, PullRequest, ReviewAction
 

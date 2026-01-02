@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 from git import Repo
@@ -45,9 +44,11 @@ class TestGitOpsInit:
 
     def test_init_invalid_repo(self) -> None:
         """Test initializing with an invalid repository."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError, match="Not a git repository"):
-                GitOps(tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValueError, match="Not a git repository"),
+        ):
+            GitOps(tmpdir)
 
 
 class TestBranchOperations:
@@ -142,9 +143,7 @@ class TestMergeOperations:
         assert result["success"] is True
         assert "Merged" in result["message"]
 
-    def test_has_uncommitted_changes(
-        self, git_ops: GitOps, temp_git_repo: Path
-    ) -> None:
+    def test_has_uncommitted_changes(self, git_ops: GitOps, temp_git_repo: Path) -> None:
         """Test detecting uncommitted changes."""
         assert git_ops.has_uncommitted_changes() is False
 
