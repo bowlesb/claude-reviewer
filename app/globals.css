@@ -91,10 +91,7 @@ input, select, textarea {
   border-radius: 4px;
 }
 
-/* ===========================================
-   PR Detail Page Styles
-   =========================================== */
-
+/* PR Detail Page Styles */
 .pr-detail {
   padding-bottom: 4rem;
 }
@@ -297,10 +294,7 @@ input, select, textarea {
   color: #d29922;
 }
 
-/* ===========================================
-   Diff Viewer Styles
-   =========================================== */
-
+/* Diff Viewer Styles */
 .file-diff {
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -363,10 +357,7 @@ input, select, textarea {
   color: white;
 }
 
-/* ===========================================
-   Markdown Preview Styles
-   =========================================== */
-
+/* Markdown Preview Styles */
 .markdown-preview {
   padding: 1.5rem 2rem;
   background: #0d1117;
@@ -468,10 +459,7 @@ input, select, textarea {
   border-radius: 6px;
 }
 
-/* ===========================================
-   Diff Content Styles
-   =========================================== */
-
+/* Diff Content Styles */
 .diff-content {
   font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
   font-size: 12px;
@@ -572,10 +560,7 @@ input, select, textarea {
   color: rgba(139, 148, 158, 0.7);
 }
 
-/* ===========================================
-   Comment Styles
-   =========================================== */
-
+/* Comment Styles */
 .inline-comment {
   margin: 0.5rem 1rem;
   padding: 0.75rem;
