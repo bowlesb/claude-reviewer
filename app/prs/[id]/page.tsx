@@ -66,12 +66,13 @@ interface PRData {
   comments: CommentWithReplies[];
 }
 
+// GitHub-style status colors
 const statusConfig = {
-  pending: { icon: Clock, color: '#f0ad4e', label: 'Pending Review' },
-  approved: { icon: CheckCircle, color: '#5cb85c', label: 'Approved' },
-  changes_requested: { icon: XCircle, color: '#d9534f', label: 'Changes Requested' },
-  merged: { icon: GitMerge, color: '#6f42c1', label: 'Merged' },
-  closed: { icon: XCircle, color: '#6c757d', label: 'Closed' },
+  pending: { icon: Clock, color: '#d29922', label: 'Pending Review' },
+  approved: { icon: CheckCircle, color: '#238636', label: 'Approved' },
+  changes_requested: { icon: XCircle, color: '#da3633', label: 'Changes Requested' },
+  merged: { icon: GitMerge, color: '#8250df', label: 'Merged' },
+  closed: { icon: XCircle, color: '#6e7681', label: 'Closed' },
 };
 
 export default function PRPage({ params }: { params: Promise<{ id: string }> }) {
@@ -840,7 +841,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          color: #f0ad4e;
+          color: #d29922;
         }
 
         /* Diff styles */
