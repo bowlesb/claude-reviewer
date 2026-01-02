@@ -6,7 +6,7 @@
 
 import puppeteer, { Browser, Page } from 'puppeteer';
 
-const BASE_URL = process.env.TEST_URL || 'http://localhost:3000';
+const BASE_URL = global.__BASE_URL__;
 
 describe('Diff Viewer E2E Tests', () => {
   let browser: Browser;
