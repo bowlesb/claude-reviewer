@@ -123,12 +123,21 @@ def create(
 
         review_url = get_review_url(pr_uuid, port)
 
+        # Check if web UI is running and add appropriate message
+        web_ui_status = ""
+        if not is_web_ui_running(port):
+            web_ui_status = (
+                "\n\n[yellow]⚠ Web UI is not running.[/yellow]\n"
+                "[dim]Start it with: claude-reviewer serve[/dim]"
+            )
+
         console.print(
             Panel(
                 f"[green]PR #{pr_uuid} created successfully[/green]\n\n"
                 f"Title: {title}\n"
                 f"Branch: {head_ref} -> {base}\n"
-                f"\n[bold]Review URL:[/bold] {review_url}",
+                f"\n[bold]Review URL:[/bold] {review_url}"
+                f"{web_ui_status}",
                 title="New PR Created",
             )
         )
@@ -569,6 +578,23 @@ def verify_docker_container(container_name: str) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
+def is_docker_running() -> bool:
+    """Check if Docker daemon is running."""
+    result = subprocess.run(["docker", "info"], capture_output=True, text=True)
+    return result.returncode == 0
+
+
+def is_web_ui_running(port: int = 3456) -> bool:
+    """Check if the web UI is running (either via Docker or locally)."""
+    # Check if our Docker container is running
+    if verify_docker_container(CONTAINER_NAME):
+        return True
+    # Check if port is in use (could be local dev server)
+    if is_port_in_use(port):
+        return True
+    return False
+
+
 def run_local_server(port: int, web_dir: Path) -> None:
     """Run the web server locally using npm."""
     console.print(f"[bold]Starting local web server on port {port}...[/bold]")
@@ -726,6 +752,8 @@ def serve(port: int, detach: bool, dev: bool, pull: bool, local: bool) -> None:
         f"{Path.home()}:/host-home:ro",
         "-e",
         "DATABASE_PATH=/data/data.db",
+        "-e",
+        "DATABASE_DIR=/data",
     ]
 
     if detach:
