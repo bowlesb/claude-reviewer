@@ -60,3 +60,9 @@ ENV/
 *.temp
 .cache/
 *.tsbuildinfo
+
+# Claude Code
+.claude/
+
+# Personal files
+MEDIUM_ARTICLE.md
