@@ -138,17 +138,29 @@ def status(pr_id: str) -> None:
 )
 @click.option("--unresolved", "-u", is_flag=True, help="Show only unresolved comments")
 def comments(pr_id: str, output_format: str, unresolved: bool) -> None:
-    """Get comments for a PR with file/line references."""
+    """Get comments for a PR with file/line references.
+
+    Shows both review summaries (from Submit Review) and inline comments.
+    """
     pr = db.get_pr_by_uuid(pr_id)
     if not pr:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
+    reviews = db.get_reviews(pr_id)
     comments_with_replies = db.get_comments_with_replies(pr_id, unresolved_only=unresolved)
 
     if output_format == "json":
         output = {
             "pr_id": pr_id,
+            "reviews": [
+                {
+                    "action": r["action"],
+                    "summary": r["summary"],
+                    "created_at": r["created_at"],
+                }
+                for r in reviews
+            ],
             "comments": [
                 {
                     "uuid": c.uuid,
@@ -163,19 +175,35 @@ def comments(pr_id: str, output_format: str, unresolved: bool) -> None:
         }
         print(json.dumps(output, indent=2))
     else:
-        if not comments_with_replies:
-            console.print("[dim]No comments found[/dim]")
-            return
+        # Show review summaries first (these are always important)
+        if reviews:
+            console.print("[bold]Review Summary:[/bold]")
+            for r in reviews:
+                action_color = "green" if r["action"] == "approve" else "yellow"
+                action_label = "Approved" if r["action"] == "approve" else "Changes Requested"
+                console.print(f"  [{action_color}]{action_label}[/{action_color}]", end="")
+                if r["summary"]:
+                    console.print(f": {r['summary']}")
+                else:
+                    console.print()
+            console.print()
 
-        for c, replies in comments_with_replies:
-            resolved_mark = "[dim](resolved)[/dim] " if c.resolved else ""
-            console.print(
-                f"{resolved_mark}[cyan][{c.file_path}:{c.line_number}][/cyan] "
-                f"[dim]({c.uuid})[/dim] {c.content}"
-            )
-            for r in replies:
-                author_color = "green" if r.author == "claude" else "blue"
-                console.print(f"  [{author_color}]↳ {r.author}:[/{author_color}] {r.content}")
+        # Show inline comments
+        if comments_with_replies:
+            console.print("[bold]Inline Comments:[/bold]")
+            for c, replies in comments_with_replies:
+                resolved_mark = "[dim](resolved)[/dim] " if c.resolved else ""
+                console.print(
+                    f"  {resolved_mark}[cyan][{c.file_path}:{c.line_number}][/cyan] "
+                    f"[dim]({c.uuid})[/dim] {c.content}"
+                )
+                for reply in replies:
+                    author_color = "green" if reply.author == "claude" else "blue"
+                    console.print(
+                        f"    [{author_color}]↳ {reply.author}:[/{author_color}] {reply.content}"
+                    )
+        elif not reviews:
+            console.print("[dim]No comments or reviews found[/dim]")
 
 
 @main.command("list")
@@ -585,12 +613,15 @@ def serve(port: int, detach: bool, dev: bool, pull: bool, local: bool) -> None:
     data_dir = Path.home() / ".claude-reviewer"
     data_dir.mkdir(exist_ok=True)
 
-    # Run the container
+    # Run the container as the host user to ensure proper file permissions
+    # This fixes "attempt to write a readonly database" errors
     run_cmd = [
         "docker",
         "run",
         "--name",
         CONTAINER_NAME,
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
         "-p",
         f"{port}:3000",
         "-v",

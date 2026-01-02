@@ -233,13 +233,14 @@ claude-reviewer stop    # Stops the container
 If you prefer to run Docker manually:
 
 ```bash
-# Pull and run
+# Pull and run (using host user for proper file permissions)
 docker run -d \
   --name claude-reviewer-web \
+  --user "$(id -u):$(id -g)" \
   -p 3456:3000 \
   -v ~/.claude-reviewer:/data \
   -v ~:/host-home:ro \
-  bowlesb/claude-reviewer:latest
+  bowles/claude-reviewer:latest
 ```
 
 ### Development with Docker Compose
