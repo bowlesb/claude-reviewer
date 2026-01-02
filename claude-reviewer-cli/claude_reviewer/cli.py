@@ -428,7 +428,7 @@ def find_web_dir() -> Path | None:
 
 
 # Docker image to use
-DOCKER_IMAGE = "bowlesb/claude-reviewer:latest"
+DOCKER_IMAGE = "bowles/claude-reviewer:latest"
 # Container name for running the web UI
 CONTAINER_NAME = "claude-reviewer-web"
 # Unique project name to avoid conflicts with other docker-compose projects (for dev mode)
