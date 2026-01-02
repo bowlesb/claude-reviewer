@@ -83,6 +83,8 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const [commentingAt, setCommentingAt] = useState<{ file: string; line: number } | null>(null);
   const [newComment, setNewComment] = useState('');
   const [editingComment, setEditingComment] = useState<{ uuid: string; content: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
   const [reviewSummary, setReviewSummary] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -205,6 +207,76 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
             : prev
         );
       }
+    }
+  };
+
+  const addReply = async (commentUuid: string) => {
+    if (!replyContent.trim() || !data) return;
+
+    const tempReply: CommentReply = {
+      id: Date.now(),
+      uuid: `temp-${Date.now()}`,
+      author: 'user',
+      content: replyContent,
+      created_at: new Date().toISOString(),
+    };
+
+    // Optimistically update local state
+    setData({
+      ...data,
+      comments: data.comments.map((c) =>
+        c.comment.uuid === commentUuid
+          ? { ...c, replies: [...c.replies, tempReply] }
+          : c
+      ),
+    });
+    setReplyContent('');
+    setReplyingTo(null);
+
+    try {
+      const res = await fetch(`/api/prs/${id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commentUuid,
+          content: replyContent,
+          author: 'user',
+        }),
+      });
+      const result = await res.json();
+      // Update with real UUID from server
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              comments: prev.comments.map((c) =>
+                c.comment.uuid === commentUuid
+                  ? {
+                      ...c,
+                      replies: c.replies.map((r) =>
+                        r.uuid === tempReply.uuid ? { ...r, uuid: result.uuid } : r
+                      ),
+                    }
+                  : c
+              ),
+            }
+          : prev
+      );
+    } catch (e) {
+      alert('Error adding reply');
+      // Revert on error
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              comments: prev.comments.map((c) =>
+                c.comment.uuid === commentUuid
+                  ? { ...c, replies: c.replies.filter((r) => r.uuid !== tempReply.uuid) }
+                  : c
+              ),
+            }
+          : prev
+      );
     }
   };
 
@@ -489,12 +561,14 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                                 <>
                                   <div className="comment-content">{c.content}</div>
                                   <div className="comment-buttons">
-                                    <button
-                                      className="edit-btn"
-                                      onClick={() => setEditingComment({ uuid: c.uuid, content: c.content })}
-                                    >
-                                      Edit
-                                    </button>
+                                    {replies.length === 0 && (
+                                      <button
+                                        className="edit-btn"
+                                        onClick={() => setEditingComment({ uuid: c.uuid, content: c.content })}
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
                                     <button
                                       className="resolve-btn"
                                       onClick={() => resolveComment(c.uuid, !c.resolved)}
@@ -512,6 +586,26 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                                         </div>
                                       ))}
                                     </div>
+                                  )}
+                                  {/* Reply form */}
+                                  {replyingTo === c.uuid ? (
+                                    <div className="reply-form">
+                                      <textarea
+                                        autoFocus
+                                        placeholder="Write a reply..."
+                                        value={replyContent}
+                                        onChange={(e) => setReplyContent(e.target.value)}
+                                        rows={2}
+                                      />
+                                      <div className="comment-actions">
+                                        <button onClick={() => addReply(c.uuid)}>Reply</button>
+                                        <button className="cancel" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Cancel</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button className="reply-btn" onClick={() => setReplyingTo(c.uuid)}>
+                                      Reply
+                                    </button>
                                   )}
                                 </>
                               )}
@@ -922,6 +1016,40 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
         .reply-content {
           color: #c9d1d9;
+        }
+
+        .reply-btn {
+          margin-top: 0.5rem;
+          padding: 0.25rem 0.5rem;
+          background: transparent;
+          border: 1px solid #30363d;
+          border-radius: 4px;
+          color: #8b949e;
+          cursor: pointer;
+          font-size: 0.75rem;
+        }
+
+        .reply-btn:hover {
+          background: #21262d;
+          color: #c9d1d9;
+        }
+
+        .reply-form {
+          margin-top: 0.5rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid #30363d;
+        }
+
+        .reply-form textarea {
+          width: 100%;
+          padding: 0.5rem;
+          border: 1px solid #30363d;
+          border-radius: 4px;
+          background: #161b22;
+          color: #c9d1d9;
+          resize: vertical;
+          margin-bottom: 0.5rem;
+          font-size: 0.85rem;
         }
 
         .edit-comment-form textarea {

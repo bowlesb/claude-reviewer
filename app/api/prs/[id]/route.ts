@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPRByUuid, getLatestDiff, updatePRStatus, getComments } from '@/lib/database';
+import { getPRByUuid, getLatestDiff, updatePRStatus, getCommentsWithReplies } from '@/lib/database';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const diff = getLatestDiff(id);
-    const comments = getComments(id);
+    const comments = getCommentsWithReplies(id);
 
     // Parse diff to get file list
     const files = parseDiffFiles(diff || '');

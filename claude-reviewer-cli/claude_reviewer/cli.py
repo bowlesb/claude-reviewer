@@ -520,13 +520,18 @@ def reply(pr_id: str, comment_uuid: str, message: str, author: str) -> None:
     default="approved",
     help="Wait until this status (default: approved)",
 )
-@click.option("--interval", "-i", default=5, help="Polling interval in seconds")
+@click.option("--interval", "-i", default=2, help="Polling interval in seconds (default: 2)")
 @click.option("--timeout", "-t", default=0, help="Timeout in seconds (0 = no timeout)")
 def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
     """Watch a PR and wait for status changes.
 
     Useful for waiting after making changes to see if the reviewer approves.
+    Uses a spinner animation while waiting.
     """
+    from rich.live import Live
+    from rich.spinner import Spinner
+    from rich.text import Text
+
     pr = db.get_pr_by_uuid(pr_id)
     if not pr:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
@@ -542,64 +547,75 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
 
     start_time = time.time()
 
+    def make_spinner_text(elapsed: int) -> Text:
+        text = Text()
+        text.append("⏳ Watching... ", style="cyan")
+        text.append(f"{elapsed}s", style="dim")
+        return text
+
     try:
-        while True:
-            time.sleep(interval)
+        with Live(Spinner("dots", text=make_spinner_text(0)), refresh_per_second=10) as live:
+            while True:
+                time.sleep(interval)
 
-            # Check timeout
-            if timeout > 0 and (time.time() - start_time) > timeout:
-                console.print("[yellow]Timeout reached[/yellow]")
-                sys.exit(1)
+                # Check timeout
+                elapsed = int(time.time() - start_time)
+                if timeout > 0 and elapsed > timeout:
+                    live.stop()
+                    console.print("[yellow]Timeout reached[/yellow]")
+                    sys.exit(1)
 
-            # Refresh PR data
-            pr = db.get_pr_by_uuid(pr_id)
-            if not pr:
-                console.print("[red]PR no longer exists[/red]")
-                sys.exit(1)
+                # Update spinner
+                live.update(Spinner("dots", text=make_spinner_text(elapsed)))
 
-            current_status = pr.status.value
+                # Refresh PR data
+                pr = db.get_pr_by_uuid(pr_id)
+                if not pr:
+                    live.stop()
+                    console.print("[red]PR no longer exists[/red]")
+                    sys.exit(1)
 
-            # Check for any change
-            if until == "any_change":
-                if current_status != initial_status or pr.updated_at != initial_updated:
-                    console.print(f"[green]Change detected![/green]")
-                    console.print(f"Status: [bold]{current_status}[/bold]")
+                current_status = pr.status.value
 
-                    # Show new comments if any
-                    comments_list = db.get_comments(pr_id, unresolved_only=True)
-                    if comments_list:
-                        console.print(f"\n[bold]Unresolved comments ({len(comments_list)}):[/bold]")
-                        for c in comments_list:
-                            console.print(
-                                f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
-                            )
-                    sys.exit(0)
-            else:
-                # Check for specific status
-                if current_status == until:
-                    status_colors = {
-                        "approved": "green",
-                        "changes_requested": "red",
-                        "pending": "yellow",
-                    }
-                    color = status_colors.get(until, "white")
-                    console.print(f"[{color}]PR is now {until}![/{color}]")
+                # Check for any change
+                if until == "any_change":
+                    if current_status != initial_status or pr.updated_at != initial_updated:
+                        live.stop()
+                        console.print(f"[green]✓ Change detected![/green]")
+                        console.print(f"Status: [bold]{current_status}[/bold]")
 
-                    if until == "changes_requested":
-                        # Show the comments
+                        # Show new comments if any
                         comments_list = db.get_comments(pr_id, unresolved_only=True)
                         if comments_list:
-                            console.print(f"\n[bold]Review comments:[/bold]")
+                            console.print(f"\n[bold]Unresolved comments ({len(comments_list)}):[/bold]")
                             for c in comments_list:
                                 console.print(
-                                    f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
-                                    f"[dim]({c.uuid})[/dim] {c.content}"
+                                    f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
                                 )
-                    sys.exit(0)
+                        sys.exit(0)
+                else:
+                    # Check for specific status
+                    if current_status == until:
+                        live.stop()
+                        status_colors = {
+                            "approved": "green",
+                            "changes_requested": "red",
+                            "pending": "yellow",
+                        }
+                        color = status_colors.get(until, "white")
+                        console.print(f"[{color}]✓ PR is now {until}![/{color}]")
 
-            # Show heartbeat
-            elapsed = int(time.time() - start_time)
-            console.print(f"[dim]Still {initial_status}... ({elapsed}s elapsed)[/dim]")
+                        if until == "changes_requested":
+                            # Show the comments
+                            comments_list = db.get_comments(pr_id, unresolved_only=True)
+                            if comments_list:
+                                console.print(f"\n[bold]Review comments:[/bold]")
+                                for c in comments_list:
+                                    console.print(
+                                        f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
+                                        f"[dim]({c.uuid})[/dim] {c.content}"
+                                    )
+                        sys.exit(0)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Stopped watching[/yellow]")

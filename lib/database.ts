@@ -106,6 +106,16 @@ export function getDatabase(): Database.Database {
   return db;
 }
 
+/**
+ * Checkpoint WAL to ensure data is written to main db file.
+ * This prevents corruption when Python CLI reads the database.
+ */
+function checkpoint(): void {
+  if (db) {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  }
+}
+
 function initSchema(db: Database.Database): void {
   db.exec(`
     -- Pull Requests table
@@ -221,6 +231,7 @@ export function createPR(
   });
 
   transaction();
+  checkpoint();
   return uuid;
 }
 
@@ -270,6 +281,7 @@ export function updatePRStatus(uuid: string, status: PullRequest['status']): boo
     SET status = ?, updated_at = CURRENT_TIMESTAMP
     WHERE uuid = ?
   `).run(status, uuid);
+  checkpoint();
   return result.changes > 0;
 }
 
@@ -312,6 +324,7 @@ export function updatePRDiff(uuid: string, diff: string, headCommit: string): nu
   });
 
   transaction();
+  checkpoint();
   return newRevision;
 }
 
@@ -344,6 +357,7 @@ export function addComment(
   });
 
   transaction();
+  checkpoint();
   return commentUuid;
 }
 
@@ -377,18 +391,21 @@ export function getComments(
 export function resolveComment(commentUuid: string, resolved: boolean = true): boolean {
   const db = getDatabase();
   const result = db.prepare('UPDATE comments SET resolved = ? WHERE uuid = ?').run(resolved ? 1 : 0, commentUuid);
+  checkpoint();
   return result.changes > 0;
 }
 
 export function updateCommentContent(commentUuid: string, content: string): boolean {
   const db = getDatabase();
   const result = db.prepare('UPDATE comments SET content = ? WHERE uuid = ?').run(content, commentUuid);
+  checkpoint();
   return result.changes > 0;
 }
 
 export function deleteComment(commentUuid: string): boolean {
   const db = getDatabase();
   const result = db.prepare('DELETE FROM comments WHERE uuid = ?').run(commentUuid);
+  checkpoint();
   return result.changes > 0;
 }
 
@@ -422,6 +439,7 @@ export function submitReview(
   });
 
   transaction();
+  checkpoint();
   return true;
 }
 
@@ -463,6 +481,7 @@ export function addReply(
   });
 
   transaction();
+  checkpoint();
   return replyUuid;
 }
 
