@@ -19,9 +19,9 @@ When working on significant changes, use the local PR review system to get feedb
 
 3. **Wait for review feedback:**
    ```bash
-   claude-reviewer watch <pr-id> --until changes_requested
+   claude-reviewer watch <pr-id> --until feedback_given
    ```
-   Or check status manually:
+   This waits for any feedback (approval or changes requested). Or check status manually:
    ```bash
    claude-reviewer status <pr-id>
    ```
