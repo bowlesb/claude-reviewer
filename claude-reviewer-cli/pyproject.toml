@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-reviewer"
-version = "0.3.0"
+version = "0.3.1"
 description = "Local PR review system for Claude Code - GitHub-style code review without leaving your terminal"
 readme = "README.md"
 license = {text = "MIT"}

@@ -31,7 +31,7 @@ claude-reviewer create --title "Add new feature"
 
 # Output:
 # PR #a1b2c3d4 created successfully
-# Review URL: http://localhost:3000/prs/a1b2c3d4
+# Review URL: http://localhost:3456/prs/a1b2c3d4
 ```
 
 ### 2. Start the Web UI
@@ -138,20 +138,98 @@ Start it with:
 claude-reviewer serve
 ```
 
-Then open http://localhost:3000
+Then open http://localhost:3456
 
 ## Configuration
+
+### Default Port
+
+The web UI runs on port **3456** by default (chosen to avoid conflicts with common dev servers like React on 3000).
+
+To use a different port:
+
+```bash
+# Via environment variable
+PORT=8080 claude-reviewer serve
+
+# Or via CLI flag
+claude-reviewer serve --port 8080
+```
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `PORT` | Port for web UI | `3456` |
 | `CLAUDE_REVIEWER_HOST` | Host for review URLs | `localhost` |
 | `CLAUDE_REVIEWER_WEB_DIR` | Path to web app | (auto-detected) |
 
 ### Database Location
 
 Data is stored in `~/.claude-reviewer/data.db`
+
+### CLAUDE.md Integration
+
+Add claude-reviewer to your project's `CLAUDE.md` file so Claude Code knows how to use it:
+
+```markdown
+## Code Review Workflow
+
+When making significant changes, use the local review system:
+
+1. Create a PR for review:
+   ```bash
+   claude-reviewer create --title "Description of changes"
+   ```
+
+2. Wait for review:
+   ```bash
+   claude-reviewer watch <pr-id> --until changes_requested
+   ```
+
+3. Address feedback by replying to comments:
+   ```bash
+   claude-reviewer comments <pr-id>
+   claude-reviewer reply <pr-id> <comment-uuid> "Fixed by doing X"
+   ```
+
+4. Update the PR after fixes:
+   ```bash
+   claude-reviewer update <pr-id>
+   ```
+
+5. Merge when approved:
+   ```bash
+   claude-reviewer merge <pr-id>
+   ```
+```
+
+## Docker Image
+
+The web UI is also available as a Docker image:
+
+```bash
+# Pull from Docker Hub
+docker pull bowlesb/claude-reviewer:latest
+
+# Run directly
+docker run -d \
+  -p 3456:3000 \
+  -v ~/.claude-reviewer:/data \
+  -v ~:/host-home:ro \
+  bowlesb/claude-reviewer:latest
+```
+
+Or use Docker Compose (recommended):
+
+```bash
+# Clone the repo
+git clone https://github.com/bowlesb/claude-reviewer
+cd claude-reviewer
+
+# Start with Docker Compose
+docker compose up -d
+```
 
 ## Integration with Claude Code
 
@@ -165,7 +243,7 @@ git commit -m "Add new feature"
 
 # Claude creates PR
 claude-reviewer create --title "Add new feature"
-# Output: Review URL: http://localhost:3000/prs/abc123
+# Output: Review URL: http://localhost:3456/prs/abc123
 
 # User reviews in browser, requests changes
 

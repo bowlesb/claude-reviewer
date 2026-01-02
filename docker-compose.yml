@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3456}:3000"
     volumes:
       # Mount the SQLite database directory from host
       - ~/.claude-reviewer:/data:rw

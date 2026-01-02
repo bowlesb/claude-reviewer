@@ -22,7 +22,7 @@ from .models import PRStatus
 console = Console()
 
 
-def get_review_url(pr_uuid: str, port: int = 3000) -> str:
+def get_review_url(pr_uuid: str, port: int = 3456) -> str:
     """Generate the review URL for a PR."""
     host = os.environ.get("CLAUDE_REVIEWER_HOST", "localhost")
     return f"http://{host}:{port}/prs/{pr_uuid}"
@@ -42,7 +42,7 @@ def main() -> None:
 @click.option("--base", "-b", default="main", help="Base branch to compare against")
 @click.option("--head", "-h", default=None, help="Head branch (default: current branch)")
 @click.option("--repo", "-r", default=".", help="Path to git repository")
-@click.option("--port", "-p", default=3000, help="Port for review URL")
+@click.option("--port", "-p", default=3456, help="Port for review URL (default: 3456)")
 def create(
     title: str,
     description: str,
@@ -410,7 +410,7 @@ def find_web_dir() -> Path | None:
 
 
 @main.command()
-@click.option("--port", "-p", default=3000, help="Port for web UI")
+@click.option("--port", "-p", default=3456, help="Port for web UI (default: 3456)")
 @click.option("--detach/--no-detach", "-d", default=True, help="Run in background")
 @click.option("--build/--no-build", default=False, help="Rebuild Docker image")
 @click.option("--dir", "web_dir_opt", default=None, help="Path to claude-reviewer web directory")
