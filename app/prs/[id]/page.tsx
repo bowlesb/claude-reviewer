@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
+import { Highlight, themes } from 'prism-react-renderer';
 import {
   ArrowLeft,
   GitPullRequest,
@@ -15,6 +16,41 @@ import {
   ChevronRight,
   Plus,
 } from 'lucide-react';
+
+// Map file extensions to Prism language identifiers
+const getLanguage = (filePath: string): string => {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  const langMap: Record<string, string> = {
+    js: 'javascript',
+    jsx: 'jsx',
+    ts: 'typescript',
+    tsx: 'tsx',
+    py: 'python',
+    rb: 'ruby',
+    java: 'java',
+    go: 'go',
+    rs: 'rust',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    css: 'css',
+    scss: 'scss',
+    html: 'markup',
+    xml: 'markup',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    md: 'markdown',
+    sql: 'sql',
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    toml: 'toml',
+    dockerfile: 'docker',
+  };
+  return langMap[ext] || 'plaintext';
+};
 
 interface PullRequest {
   id: number;
@@ -74,6 +110,41 @@ const statusConfig = {
   merged: { icon: GitMerge, color: '#8250df', label: 'Merged' },
   closed: { icon: XCircle, color: '#6e7681', label: 'Closed' },
 };
+
+// GitHub-like dark theme for syntax highlighting
+const githubDarkTheme = {
+  plain: {
+    color: '#c9d1d9',
+    backgroundColor: 'transparent',
+  },
+  styles: [
+    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: '#8b949e' } },
+    { types: ['punctuation'], style: { color: '#c9d1d9' } },
+    { types: ['namespace'], style: { opacity: 0.7 } },
+    { types: ['property', 'tag', 'boolean', 'number', 'constant', 'symbol', 'deleted'], style: { color: '#79c0ff' } },
+    { types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'], style: { color: '#a5d6ff' } },
+    { types: ['operator', 'entity', 'url'], style: { color: '#c9d1d9' } },
+    { types: ['atrule', 'attr-value', 'keyword'], style: { color: '#ff7b72' } },
+    { types: ['function', 'class-name'], style: { color: '#d2a8ff' } },
+    { types: ['regex', 'important', 'variable'], style: { color: '#ffa657' } },
+    { types: ['string'], style: { color: '#a5d6ff' } },
+  ],
+};
+
+// Component to render a syntax-highlighted line
+function SyntaxLine({ code, language }: { code: string; language: string }) {
+  return (
+    <Highlight theme={githubDarkTheme} code={code} language={language}>
+      {({ tokens, getTokenProps }) => (
+        <span style={{ whiteSpace: 'pre' }}>
+          {tokens[0]?.map((token, i) => (
+            <span key={i} {...getTokenProps({ token })} />
+          ))}
+        </span>
+      )}
+    </Highlight>
+  );
+}
 
 export default function PRPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -538,7 +609,14 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                               <Plus size={12} className="add-comment-icon" />
                             </span>
                             <span className="line-content">
-                              {line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
+                              {line.startsWith('@@') ? (
+                                line
+                              ) : (
+                                <SyntaxLine
+                                  code={line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
+                                  language={getLanguage(file.path)}
+                                />
+                              )}
                             </span>
                           </div>
 
