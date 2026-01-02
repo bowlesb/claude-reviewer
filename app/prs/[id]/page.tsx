@@ -364,7 +364,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
     const tempReply: CommentReply = {
       id: Date.now(),
       uuid: `temp-${Date.now()}`,
-      author: 'user',
+      author: 'ben',
       content: replyContent,
       created_at: new Date().toISOString(),
     };
@@ -388,7 +388,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         body: JSON.stringify({
           commentUuid,
           content: replyContent,
-          author: 'user',
+          author: 'ben',
         }),
       });
       const result = await res.json();
@@ -790,7 +790,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                                   {replies.length > 0 && (
                                     <div className="comment-replies">
                                       {replies.map((r) => (
-                                        <div key={r.uuid} className={`comment-reply ${r.author === 'claude' ? 'reply-claude' : 'reply-user'}`}>
+                                        <div key={r.uuid} className={`comment-reply ${r.author === 'claude' ? 'reply-claude' : 'reply-ben'}`}>
                                           <span className="reply-author">{r.author}:</span>
                                           <span className="reply-content">{r.content}</span>
                                         </div>
@@ -1245,10 +1245,10 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         }
 
         .line-indicator {
-          width: 24px;
-          min-width: 24px;
-          padding: 0 8px 0 0;
-          text-align: center;
+          width: 18px;
+          min-width: 18px;
+          padding-left: 8px;
+          text-align: left;
           user-select: none;
         }
 
@@ -1371,7 +1371,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           border-left: 3px solid #3fb950;
         }
 
-        .reply-user {
+        .reply-ben {
           background: rgba(56, 139, 253, 0.15);
           border-left: 3px solid #58a6ff;
         }
@@ -1385,7 +1385,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           color: #3fb950;
         }
 
-        .reply-user .reply-author {
+        .reply-ben .reply-author {
           color: #58a6ff;
         }
 
