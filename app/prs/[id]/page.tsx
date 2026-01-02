@@ -199,11 +199,41 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       if (line.startsWith('-')) continue; // Skip deleted lines
       if (line.startsWith('+')) {
         contentLines.push(line.slice(1)); // Add new lines without +
+      } else if (line.startsWith(' ')) {
+        contentLines.push(line.slice(1)); // Context lines have leading space
       } else {
-        contentLines.push(line); // Context lines
+        contentLines.push(line); // Empty lines or other
       }
     }
     return contentLines.join('\n');
+  };
+
+  // Custom code block renderer for markdown with syntax highlighting
+  const CodeBlock = ({ className, children, ...props }: { className?: string; children?: React.ReactNode }) => {
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : '';
+    const code = String(children).replace(/\n$/, '');
+
+    if (!className) {
+      // Inline code
+      return <code className="inline-code" {...props}>{children}</code>;
+    }
+
+    return (
+      <Highlight theme={githubDarkTheme} code={code} language={language || 'plaintext'}>
+        {({ style, tokens, getLineProps, getTokenProps }) => (
+          <pre style={{ ...style, background: '#161b22', padding: '16px', borderRadius: '6px', overflow: 'auto' }}>
+            {tokens.map((line, i) => (
+              <div key={i} {...getLineProps({ line })}>
+                {line.map((token, key) => (
+                  <span key={key} {...getTokenProps({ token })} />
+                ))}
+              </div>
+            ))}
+          </pre>
+        )}
+      </Highlight>
+    );
   };
 
   useEffect(() => {
@@ -632,7 +662,12 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
                 {isExpanded && isPreview && isMd && (
                   <div className="markdown-preview">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code: CodeBlock,
+                      }}
+                    >
                       {getFileContentFromDiff(diff, file.path)}
                     </ReactMarkdown>
                   </div>
@@ -1108,26 +1143,31 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           margin-bottom: 1rem;
         }
 
-        .markdown-preview code {
-          background: #161b22;
-          padding: 0.2rem 0.4rem;
-          border-radius: 4px;
-          font-family: monospace;
-          font-size: 0.9em;
-          color: #79c0ff;
+        .markdown-preview .inline-code {
+          background: rgba(110, 118, 129, 0.4);
+          padding: 0.2em 0.4em;
+          border-radius: 6px;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+          font-size: 85%;
+          color: #c9d1d9;
         }
 
         .markdown-preview pre {
           background: #161b22;
-          padding: 1rem;
+          padding: 16px;
           border-radius: 6px;
           overflow-x: auto;
-          margin: 1rem 0;
+          margin: 16px 0;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+          font-size: 85%;
+          line-height: 1.45;
         }
 
         .markdown-preview pre code {
           background: none;
           padding: 0;
+          font-size: inherit;
+          color: inherit;
         }
 
         .markdown-preview ul,
@@ -1191,103 +1231,83 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         }
 
         .line-num {
-          width: 48px;
-          min-width: 48px;
-          padding: 0 8px;
+          width: 40px;
+          min-width: 40px;
+          padding: 0 10px;
           text-align: right;
-          color: #6e7681;
-          background: #161b22;
+          color: rgba(110, 118, 129, 0.8);
           user-select: none;
           cursor: pointer;
-          border-right: 1px solid #30363d;
         }
 
         .line-num:hover {
           color: #c9d1d9;
         }
 
-        .line-num-old {
-          border-right: none;
-        }
-
-        .line-num-new {
-          border-right: 1px solid #30363d;
-        }
-
         .line-indicator {
-          width: 20px;
-          min-width: 20px;
+          width: 24px;
+          min-width: 24px;
+          padding: 0 8px 0 0;
           text-align: center;
           user-select: none;
-          font-weight: bold;
         }
 
         .line-content {
           flex: 1;
-          padding: 0 8px;
+          padding: 0 16px 0 8px;
           white-space: pre;
           cursor: pointer;
         }
 
         .line-content:hover {
-          background: rgba(56, 139, 253, 0.1) !important;
+          background: rgba(56, 139, 253, 0.15) !important;
         }
 
         /* Added lines - GitHub green */
         .line-add.line-num {
-          background: #122117;
-          color: #3fb950;
+          background: rgba(46, 160, 67, 0.15);
         }
         .line-add.line-indicator {
-          background: #1a4721;
+          background: rgba(46, 160, 67, 0.4);
           color: #3fb950;
         }
         .line-add.line-content {
-          background: #0d1f13;
+          background: rgba(46, 160, 67, 0.15);
         }
 
         /* Deleted lines - GitHub red */
         .line-del.line-num {
-          background: #2d1619;
-          color: #f85149;
+          background: rgba(248, 81, 73, 0.15);
         }
         .line-del.line-indicator {
-          background: #4d1f23;
+          background: rgba(248, 81, 73, 0.4);
           color: #f85149;
         }
         .line-del.line-content {
-          background: #22090c;
+          background: rgba(248, 81, 73, 0.15);
         }
 
         /* Context lines */
-        .line-ctx.line-num {
-          background: #161b22;
-        }
-        .line-ctx.line-indicator {
-          background: #161b22;
-        }
+        .line-ctx.line-num,
+        .line-ctx.line-indicator,
         .line-ctx.line-content {
           background: #0d1117;
         }
 
         /* Hunk header - GitHub blue */
-        .line-hunk {
-          background: rgba(56, 139, 253, 0.15);
-        }
-        .line-hunk.line-num {
-          background: rgba(56, 139, 253, 0.15);
-          color: #6e7681;
-        }
+        .line-hunk.line-num,
         .line-hunk.line-indicator {
-          background: rgba(56, 139, 253, 0.15);
+          background: rgba(56, 139, 253, 0.1);
+          color: transparent;
         }
         .line-hunk.line-content {
-          background: rgba(56, 139, 253, 0.15);
-          color: #8b949e;
+          background: rgba(56, 139, 253, 0.1);
+          color: rgba(139, 148, 158, 0.7);
+          padding-left: 16px;
         }
 
         .hunk-info {
-          color: #8b949e;
+          color: rgba(139, 148, 158, 0.7);
         }
 
         .inline-comment {
