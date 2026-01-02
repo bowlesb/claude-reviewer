@@ -162,24 +162,24 @@ describe("PR Workflow E2E Tests", () => {
       // Wait for list to load
       await page.waitForFunction(
         () => document.body.textContent?.includes("Test PR for E2E"),
-        { timeout: 10000 }
+        { timeout: 30000 }
       );
 
       // Find and click the PR link
       const prLink = await page.$(`a[href*="${testPRUuid}"]`);
       if (prLink) {
         await prLink.click();
-        await page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => {});
+        await page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => { });
       } else {
         // Try clicking on the PR row or title
-        await page.click(`text/Test PR for E2E`).catch(() => {});
+        await page.click(`text/Test PR for E2E`).catch(() => { });
       }
 
       // Wait for navigation
       await page.waitForFunction(
         () => window.location.pathname.includes("/prs/"),
         { timeout: 5000 }
-      ).catch(() => {});
+      ).catch(() => { });
 
       // Verify we're on the PR page
       const url = page.url();

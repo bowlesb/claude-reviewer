@@ -161,6 +161,16 @@ claude-reviewer merge a1b2c3d4 --delete-branch
 
 ## Web UI Features
 
+### PR Dashboard
+View all PRs with status indicators, filtering, and quick actions.
+
+![PR Dashboard](public/screenshots/dashboard.png)
+
+### Diff Viewer & Reviews
+GitHub-style diff viewer with syntax highlighting and inline commenting.
+
+![Diff Viewer](public/screenshots/diff-view.png)
+
 - **PR Dashboard** - View all PRs with status indicators
 - **GitHub-style Diff Viewer** - Syntax highlighted, unified diff view
 - **Inline Comments** - Click any line number to add a comment
