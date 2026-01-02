@@ -640,56 +640,81 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
                 {isExpanded && !isPreview && (
                   <div className="diff-content">
-                    {diffLines.map((line, idx) => {
-                      // Track line numbers for + lines
-                      if (line.startsWith('+') && !line.startsWith('@@')) {
-                        lineNum++;
-                      } else if (line.startsWith('@@')) {
-                        const match = line.match(/@@ .* \+(\d+)/);
-                        if (match) lineNum = parseInt(match[1]) - 1;
-                      } else if (!line.startsWith('-')) {
-                        lineNum++;
-                      }
+                    {(() => {
+                      let oldLineNum = 0;
+                      let newLineNum = 0;
 
-                      const currentLine = lineNum;
-                      const lineClasses = line.startsWith('+')
-                        ? 'line-add'
-                        : line.startsWith('-')
-                        ? 'line-del'
-                        : line.startsWith('@@')
-                        ? 'line-hunk'
-                        : 'line-ctx';
+                      return diffLines.map((line, idx) => {
+                        // Parse hunk header for line numbers
+                        if (line.startsWith('@@')) {
+                          const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/);
+                          if (match) {
+                            oldLineNum = parseInt(match[1]) - 1;
+                            newLineNum = parseInt(match[2]) - 1;
+                          }
+                        }
 
-                      // Find comments for this line
-                      const lineComments = fileComments.filter(
-                        (c) => c.comment.line_number === currentLine && !line.startsWith('-') && !line.startsWith('@@')
-                      );
+                        // Track line numbers based on line type
+                        let displayOldLine = '';
+                        let displayNewLine = '';
+                        let indicator = ' ';
 
-                      return (
-                        <div key={idx}>
-                          <div className={`diff-line ${lineClasses}`}>
-                            <span
-                              className="line-num"
-                              onClick={() => {
-                                if (!line.startsWith('-') && !line.startsWith('@@')) {
-                                  setCommentingAt({ file: file.path, line: currentLine });
-                                }
-                              }}
-                            >
-                              {!line.startsWith('-') && !line.startsWith('@@') ? currentLine : ''}
-                              <Plus size={12} className="add-comment-icon" />
-                            </span>
-                            <span className="line-content">
-                              {line.startsWith('@@') ? (
-                                line
-                              ) : (
-                                <SyntaxLine
-                                  code={line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
-                                  language={getLanguage(file.path)}
-                                />
-                              )}
-                            </span>
-                          </div>
+                        if (line.startsWith('@@')) {
+                          // Hunk header - no line numbers
+                        } else if (line.startsWith('+')) {
+                          newLineNum++;
+                          displayNewLine = String(newLineNum);
+                          indicator = '+';
+                        } else if (line.startsWith('-')) {
+                          oldLineNum++;
+                          displayOldLine = String(oldLineNum);
+                          indicator = '-';
+                        } else {
+                          // Context line
+                          oldLineNum++;
+                          newLineNum++;
+                          displayOldLine = String(oldLineNum);
+                          displayNewLine = String(newLineNum);
+                        }
+
+                        const currentLine = newLineNum;
+                        const lineClasses = line.startsWith('+')
+                          ? 'line-add'
+                          : line.startsWith('-')
+                          ? 'line-del'
+                          : line.startsWith('@@')
+                          ? 'line-hunk'
+                          : 'line-ctx';
+
+                        // Find comments for this line (only for new/context lines)
+                        const lineComments = fileComments.filter(
+                          (c) => c.comment.line_number === currentLine && !line.startsWith('-') && !line.startsWith('@@')
+                        );
+
+                        return (
+                          <div key={idx}>
+                            <div className={`diff-line ${lineClasses}`}>
+                              <span className={`line-num line-num-old ${lineClasses}`}>{displayOldLine}</span>
+                              <span className={`line-num line-num-new ${lineClasses}`}>{displayNewLine}</span>
+                              <span className={`line-indicator ${lineClasses}`}>{indicator}</span>
+                              <span
+                                className={`line-content ${lineClasses}`}
+                                onClick={() => {
+                                  if (!line.startsWith('-') && !line.startsWith('@@')) {
+                                    setCommentingAt({ file: file.path, line: currentLine });
+                                  }
+                                }}
+                              >
+                                {line.startsWith('@@') ? (
+                                  <span className="hunk-info">{line}</span>
+                                ) : (
+                                  <SyntaxLine
+                                    code={line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
+                                    language={getLanguage(file.path)}
+                                  />
+                                )}
+                              </span>
+                            </div>
 
                           {/* Inline comments with replies */}
                           {lineComments.map(({ comment: c, replies }) => (
@@ -782,7 +807,8 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                           )}
                         </div>
                       );
-                    })}
+                    });
+                  })()}
                   </div>
                 )}
               </div>
@@ -1153,62 +1179,114 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         }
 
         .diff-content {
-          font-family: monospace;
-          font-size: 0.8rem;
+          font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+          font-size: 12px;
+          line-height: 20px;
           overflow-x: auto;
         }
 
         .diff-line {
           display: flex;
-          min-height: 1.5rem;
+          min-height: 20px;
         }
 
         .line-num {
-          width: 50px;
-          padding: 0 0.5rem;
+          width: 48px;
+          min-width: 48px;
+          padding: 0 8px;
           text-align: right;
-          color: #484f58;
+          color: #6e7681;
           background: #161b22;
           user-select: none;
           cursor: pointer;
-          position: relative;
+          border-right: 1px solid #30363d;
         }
 
-        .line-num:hover .add-comment-icon {
-          opacity: 1;
+        .line-num:hover {
+          color: #c9d1d9;
         }
 
-        .add-comment-icon {
-          position: absolute;
-          right: 4px;
-          top: 50%;
-          transform: translateY(-50%);
-          opacity: 0;
-          color: #58a6ff;
+        .line-num-old {
+          border-right: none;
+        }
+
+        .line-num-new {
+          border-right: 1px solid #30363d;
+        }
+
+        .line-indicator {
+          width: 20px;
+          min-width: 20px;
+          text-align: center;
+          user-select: none;
+          font-weight: bold;
         }
 
         .line-content {
           flex: 1;
-          padding: 0 1rem;
+          padding: 0 8px;
           white-space: pre;
+          cursor: pointer;
         }
 
-        .line-add {
-          background: rgba(46, 160, 67, 0.15);
-        }
-        .line-add .line-content {
-          background: rgba(46, 160, 67, 0.15);
+        .line-content:hover {
+          background: rgba(56, 139, 253, 0.1) !important;
         }
 
-        .line-del {
-          background: rgba(248, 81, 73, 0.15);
+        /* Added lines - GitHub green */
+        .line-add.line-num {
+          background: #122117;
+          color: #3fb950;
         }
-        .line-del .line-content {
-          background: rgba(248, 81, 73, 0.15);
+        .line-add.line-indicator {
+          background: #1a4721;
+          color: #3fb950;
+        }
+        .line-add.line-content {
+          background: #0d1f13;
         }
 
+        /* Deleted lines - GitHub red */
+        .line-del.line-num {
+          background: #2d1619;
+          color: #f85149;
+        }
+        .line-del.line-indicator {
+          background: #4d1f23;
+          color: #f85149;
+        }
+        .line-del.line-content {
+          background: #22090c;
+        }
+
+        /* Context lines */
+        .line-ctx.line-num {
+          background: #161b22;
+        }
+        .line-ctx.line-indicator {
+          background: #161b22;
+        }
+        .line-ctx.line-content {
+          background: #0d1117;
+        }
+
+        /* Hunk header - GitHub blue */
         .line-hunk {
-          background: rgba(56, 139, 253, 0.1);
+          background: rgba(56, 139, 253, 0.15);
+        }
+        .line-hunk.line-num {
+          background: rgba(56, 139, 253, 0.15);
+          color: #6e7681;
+        }
+        .line-hunk.line-indicator {
+          background: rgba(56, 139, 253, 0.15);
+        }
+        .line-hunk.line-content {
+          background: rgba(56, 139, 253, 0.15);
+          color: #8b949e;
+        }
+
+        .hunk-info {
           color: #8b949e;
         }
 
