@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -117,12 +118,13 @@ def status(pr_id: str) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
 
     color = status_colors.get(pr.status, "white")
@@ -206,12 +208,13 @@ def list_prs(repo: str | None, status: str | None, limit: int) -> None:
     table.add_column("Status", style="bold")
     table.add_column("Updated", style="dim")
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
 
     for pr in prs:
@@ -342,12 +345,13 @@ def show(pr_id: str) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
     color = status_colors.get(pr.status, "white")
 
@@ -384,7 +388,6 @@ def show(pr_id: str) -> None:
 
 def is_port_in_use(port: int) -> bool:
     """Check if a port is already in use."""
-    import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         return s.connect_ex(('localhost', port)) == 0
@@ -624,17 +627,19 @@ def reply(pr_id: str, comment_uuid: str, message: str, author: str) -> None:
 @click.option(
     "--until",
     "-u",
-    type=click.Choice(["approved", "changes_requested", "pending", "any_change"]),
-    default="approved",
-    help="Wait until this status (default: approved)",
+    type=click.Choice(["approved", "changes_requested", "feedback_given", "pending", "any_change"]),
+    default="feedback_given",
+    help="Wait until this status (default: feedback_given = approved or changes_requested)",
 )
 @click.option("--interval", "-i", default=2, help="Polling interval in seconds (default: 2)")
 @click.option("--timeout", "-t", default=0, help="Timeout in seconds (0 = no timeout)")
 def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
     """Watch a PR and wait for status changes.
 
-    Useful for waiting after making changes to see if the reviewer approves.
+    Useful for waiting after creating a PR to see reviewer feedback.
     Uses a spinner animation while waiting.
+
+    The default --until feedback_given waits for either approval or changes_requested.
     """
     from rich.live import Live
     from rich.spinner import Spinner
@@ -701,14 +706,33 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
                                     f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
                                 )
                         sys.exit(0)
+                elif until == "feedback_given":
+                    # Wait for either approved or changes_requested
+                    if current_status in ("approved", "changes_requested"):
+                        live.stop()
+                        if current_status == "approved":
+                            console.print("[#3fb950]✓ PR approved![/#3fb950]")
+                        else:
+                            console.print("[#f85149]✓ Changes requested[/#f85149]")
+                            # Show the comments
+                            comments_list = db.get_comments(pr_id, unresolved_only=True)
+                            if comments_list:
+                                console.print(f"\n[bold]Review comments:[/bold]")
+                                for c in comments_list:
+                                    console.print(
+                                        f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
+                                        f"[dim]({c.uuid})[/dim] {c.content}"
+                                    )
+                        sys.exit(0)
                 else:
                     # Check for specific status
                     if current_status == until:
                         live.stop()
+                        # GitHub-style status colors
                         status_colors = {
-                            "approved": "green",
-                            "changes_requested": "red",
-                            "pending": "yellow",
+                            "approved": "#3fb950",
+                            "changes_requested": "#f85149",
+                            "pending": "#d29922",
                         }
                         color = status_colors.get(until, "white")
                         console.print(f"[{color}]✓ PR is now {until}![/{color}]")
