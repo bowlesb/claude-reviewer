@@ -23,7 +23,7 @@ from .models import PRStatus
 console = Console()
 
 
-def get_review_url(pr_uuid: str, port: int = 3456) -> str:
+def get_review_url(pr_uuid: str, port: int = 41729) -> str:
     """Generate the review URL for a PR."""
     host = os.environ.get("CLAUDE_REVIEWER_HOST", "localhost")
     return f"http://{host}:{port}/prs/{pr_uuid}"
@@ -43,7 +43,7 @@ def main() -> None:
 @click.option("--base", "-b", default=None, help="Base branch (default: auto-detect main/master)")
 @click.option("--head", "-h", default=None, help="Head branch (default: current branch)")
 @click.option("--repo", "-r", default=".", help="Path to git repository")
-@click.option("--port", "-p", default=3456, help="Port for review URL (default: 3456)")
+@click.option("--port", "-p", default=41729, help="Port for review URL (default: 41729)")
 def create(
     title: str,
     description: str,
@@ -584,7 +584,7 @@ def is_docker_running() -> bool:
     return result.returncode == 0
 
 
-def is_web_ui_running(port: int = 3456) -> bool:
+def is_web_ui_running(port: int = 41729) -> bool:
     """Check if the web UI is running (either via Docker or locally)."""
     # Check if our Docker container is running
     if verify_docker_container(CONTAINER_NAME):
@@ -621,7 +621,7 @@ def run_local_server(port: int, web_dir: Path) -> None:
 
 
 @main.command()
-@click.option("--port", "-p", default=3456, help="Port for web UI (default: 3456)")
+@click.option("--port", "-p", default=41729, help="Port for web UI (default: 41729)")
 @click.option("--detach/--no-detach", "-d", default=True, help="Run in background (Docker only)")
 @click.option("--dev", is_flag=True, help="Use local docker-compose for development")
 @click.option("--pull/--no-pull", default=True, help="Pull latest image before starting")
