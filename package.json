@@ -21,6 +21,8 @@
     "react": "19.2.3",
     "react-diff-viewer-continued": "^3.4.0",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "simple-git": "^3.30.0"
   },
   "devDependencies": {

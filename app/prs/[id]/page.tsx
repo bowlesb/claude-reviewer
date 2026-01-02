@@ -3,6 +3,8 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { Highlight, themes } from 'prism-react-renderer';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
   GitPullRequest,
@@ -12,6 +14,9 @@ import {
   GitMerge,
   MessageSquare,
   File,
+  FileText,
+  Eye,
+  Code,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -159,6 +164,47 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const [replyContent, setReplyContent] = useState('');
   const [reviewSummary, setReviewSummary] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [previewMode, setPreviewMode] = useState<Set<string>>(new Set());
+
+  const isMarkdownFile = (path: string) => {
+    const ext = path.split('.').pop()?.toLowerCase();
+    return ext === 'md' || ext === 'markdown';
+  };
+
+  const togglePreview = (path: string) => {
+    const newPreview = new Set(previewMode);
+    if (newPreview.has(path)) {
+      newPreview.delete(path);
+    } else {
+      newPreview.add(path);
+    }
+    setPreviewMode(newPreview);
+  };
+
+  // Extract full file content from diff for markdown preview
+  const getFileContentFromDiff = (diffContent: string, filePath: string): string => {
+    const fileMatch = diffContent.match(
+      new RegExp(`diff --git a/${filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} b/${filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?(?=diff --git|$)`)
+    );
+    if (!fileMatch) return '';
+
+    const lines = fileMatch[0].split('\n');
+    const contentLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith('diff --git') || line.startsWith('index ') ||
+          line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+        continue;
+      }
+      if (line.startsWith('-')) continue; // Skip deleted lines
+      if (line.startsWith('+')) {
+        contentLines.push(line.slice(1)); // Add new lines without +
+      } else {
+        contentLines.push(line); // Context lines
+      }
+    }
+    return contentLines.join('\n');
+  };
 
   useEffect(() => {
     fetchPR();
@@ -559,15 +605,40 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
 
             let lineNum = 0;
 
+            const isPreview = previewMode.has(file.path);
+            const isMd = isMarkdownFile(file.path);
+
             return (
               <div key={file.path} id={`file-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}`} className="file-diff">
-                <div className="file-header" onClick={() => toggleFile(file.path)}>
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  <span className="file-path">{file.path}</span>
-                  <span className="file-badge">{file.changeType}</span>
+                <div className="file-header">
+                  <div className="file-header-left" onClick={() => toggleFile(file.path)}>
+                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <span className="file-path">{file.path}</span>
+                    <span className="file-badge">{file.changeType}</span>
+                  </div>
+                  {isMd && isExpanded && (
+                    <button
+                      className={`preview-toggle ${isPreview ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePreview(file.path);
+                      }}
+                    >
+                      {isPreview ? <Code size={14} /> : <Eye size={14} />}
+                      {isPreview ? 'Raw' : 'Preview'}
+                    </button>
+                  )}
                 </div>
 
-                {isExpanded && (
+                {isExpanded && isPreview && isMd && (
+                  <div className="markdown-preview">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {getFileContentFromDiff(diff, file.path)}
+                    </ReactMarkdown>
+                  </div>
+                )}
+
+                {isExpanded && !isPreview && (
                   <div className="diff-content">
                     {diffLines.map((line, idx) => {
                       // Track line numbers for + lines
@@ -933,15 +1004,21 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         .file-header {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          justify-content: space-between;
           padding: 0.75rem 1rem;
           background: #161b22;
           border-bottom: 1px solid #30363d;
+        }
+
+        .file-header-left {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
           cursor: pointer;
+          flex: 1;
         }
 
         .file-path {
-          flex: 1;
           font-family: monospace;
           font-size: 0.875rem;
         }
@@ -952,6 +1029,127 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           border-radius: 4px;
           background: #21262d;
           color: #8b949e;
+        }
+
+        .preview-toggle {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          padding: 0.375rem 0.75rem;
+          background: #21262d;
+          border: 1px solid #30363d;
+          border-radius: 6px;
+          color: #8b949e;
+          font-size: 0.75rem;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .preview-toggle:hover {
+          background: #30363d;
+          color: #c9d1d9;
+        }
+
+        .preview-toggle.active {
+          background: #238636;
+          border-color: #238636;
+          color: white;
+        }
+
+        .markdown-preview {
+          padding: 1.5rem 2rem;
+          background: #0d1117;
+          color: #c9d1d9;
+          line-height: 1.6;
+        }
+
+        .markdown-preview h1,
+        .markdown-preview h2,
+        .markdown-preview h3,
+        .markdown-preview h4 {
+          color: #c9d1d9;
+          border-bottom: 1px solid #30363d;
+          padding-bottom: 0.5rem;
+          margin-top: 1.5rem;
+          margin-bottom: 1rem;
+        }
+
+        .markdown-preview h1 { font-size: 2rem; }
+        .markdown-preview h2 { font-size: 1.5rem; }
+        .markdown-preview h3 { font-size: 1.25rem; }
+
+        .markdown-preview p {
+          margin-bottom: 1rem;
+        }
+
+        .markdown-preview code {
+          background: #161b22;
+          padding: 0.2rem 0.4rem;
+          border-radius: 4px;
+          font-family: monospace;
+          font-size: 0.9em;
+          color: #79c0ff;
+        }
+
+        .markdown-preview pre {
+          background: #161b22;
+          padding: 1rem;
+          border-radius: 6px;
+          overflow-x: auto;
+          margin: 1rem 0;
+        }
+
+        .markdown-preview pre code {
+          background: none;
+          padding: 0;
+        }
+
+        .markdown-preview ul,
+        .markdown-preview ol {
+          margin-bottom: 1rem;
+          padding-left: 2rem;
+        }
+
+        .markdown-preview li {
+          margin-bottom: 0.25rem;
+        }
+
+        .markdown-preview blockquote {
+          border-left: 4px solid #30363d;
+          padding-left: 1rem;
+          margin: 1rem 0;
+          color: #8b949e;
+        }
+
+        .markdown-preview a {
+          color: #58a6ff;
+          text-decoration: none;
+        }
+
+        .markdown-preview a:hover {
+          text-decoration: underline;
+        }
+
+        .markdown-preview table {
+          border-collapse: collapse;
+          margin: 1rem 0;
+          width: 100%;
+        }
+
+        .markdown-preview th,
+        .markdown-preview td {
+          border: 1px solid #30363d;
+          padding: 0.5rem 1rem;
+          text-align: left;
+        }
+
+        .markdown-preview th {
+          background: #161b22;
+        }
+
+        .markdown-preview img {
+          max-width: 100%;
+          border-radius: 6px;
         }
 
         .diff-content {
