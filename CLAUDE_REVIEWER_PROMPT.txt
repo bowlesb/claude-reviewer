@@ -1,0 +1,69 @@
+# Claude Reviewer - Code Review Workflow
+
+When working on significant changes, use the local PR review system to get feedback before merging.
+
+## Workflow
+
+1. **Create a feature branch and make changes:**
+   ```bash
+   git checkout -b feature/my-changes
+   # ... make changes ...
+   git add . && git commit -m "Description of changes"
+   ```
+
+2. **Create a PR for review:**
+   ```bash
+   claude-reviewer create --title "Description of changes" --base main
+   ```
+   This returns a PR ID (e.g., `a1b2c3d4`) and review URL.
+
+3. **Wait for review feedback:**
+   ```bash
+   claude-reviewer watch <pr-id> --until feedback_given
+   ```
+   This waits for any feedback (approval or changes requested). Or check status manually:
+   ```bash
+   claude-reviewer status <pr-id>
+   ```
+
+4. **Read and address feedback:**
+   ```bash
+   claude-reviewer comments <pr-id>
+   ```
+   Output format: `[file:line] Comment text`
+
+5. **Reply to comments after fixing:**
+   ```bash
+   claude-reviewer reply <pr-id> <comment-uuid> "Fixed by doing X"
+   ```
+
+6. **Update the PR after making fixes:**
+   ```bash
+   git add . && git commit -m "Address review feedback"
+   claude-reviewer update <pr-id>
+   ```
+
+7. **Merge when approved:**
+   ```bash
+   claude-reviewer status <pr-id>  # Should show "approved"
+   claude-reviewer merge <pr-id> --delete-branch
+   ```
+
+## Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `create` | Create PR from current branch |
+| `status` | Check PR status (pending/approved/changes_requested) |
+| `comments` | Get inline comments with file:line references |
+| `reply` | Reply to a specific comment |
+| `update` | Update PR diff after making changes |
+| `merge` | Merge an approved PR |
+| `serve` | Start the web UI (http://localhost:3456) |
+
+## Tips
+
+- Always create a feature branch before making a PR (can't PR from main to main)
+- The web UI at localhost:3456 shows diffs with inline commenting
+- Use `--delete-branch` with merge to clean up feature branches
+- Check `claude-reviewer comments <pr-id> --unresolved` for pending items
