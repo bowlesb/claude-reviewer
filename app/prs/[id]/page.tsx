@@ -1263,28 +1263,28 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           background: rgba(56, 139, 253, 0.15) !important;
         }
 
-        /* Added lines - GitHub green */
+        /* Added lines - GitHub green: brighter line nums, same shade for indicator+content */
         .line-add.line-num {
-          background: rgba(46, 160, 67, 0.15);
+          background: rgba(46, 160, 67, 0.3);
         }
-        .line-add.line-indicator {
-          background: rgba(46, 160, 67, 0.4);
-          color: #3fb950;
-        }
+        .line-add.line-indicator,
         .line-add.line-content {
           background: rgba(46, 160, 67, 0.15);
         }
+        .line-add.line-indicator {
+          color: #3fb950;
+        }
 
-        /* Deleted lines - GitHub red */
+        /* Deleted lines - GitHub red: brighter line nums, same shade for indicator+content */
         .line-del.line-num {
+          background: rgba(248, 81, 73, 0.3);
+        }
+        .line-del.line-indicator,
+        .line-del.line-content {
           background: rgba(248, 81, 73, 0.15);
         }
         .line-del.line-indicator {
-          background: rgba(248, 81, 73, 0.4);
           color: #f85149;
-        }
-        .line-del.line-content {
-          background: rgba(248, 81, 73, 0.15);
         }
 
         /* Context lines */
