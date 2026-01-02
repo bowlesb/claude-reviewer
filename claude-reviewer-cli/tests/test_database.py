@@ -67,6 +67,30 @@ class TestPullRequests:
         pr = db.get_pr_by_uuid("nonexistent")
         assert pr is None
 
+    def test_delete_pr(self, temp_db: Path) -> None:
+        """Test deleting a PR."""
+        uuid = db.create_pr(
+            repo_path="/repo",
+            title="PR",
+            base_ref="main",
+            head_ref="f",
+            base_commit="a",
+            head_commit="b",
+            diff="d",
+        )
+        
+        # Add a comment to verify cascade delete
+        db.add_comment(uuid, "file.py", 1, "comment")
+
+        result = db.delete_pr(uuid)
+        assert result is True
+
+        pr = db.get_pr_by_uuid(uuid)
+        assert pr is None
+        
+        comments = db.get_comments(uuid)
+        assert len(comments) == 0
+
     def test_list_prs(self, temp_db: Path) -> None:
         """Test listing PRs."""
         # Create multiple PRs

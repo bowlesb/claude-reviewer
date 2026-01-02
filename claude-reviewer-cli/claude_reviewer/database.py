@@ -274,6 +274,16 @@ def update_pr_status(pr_uuid: str, status: PRStatus) -> bool:
         return bool(cursor.rowcount > 0)
 
 
+def delete_pr(pr_uuid: str) -> bool:
+    """Delete a PR and all associated data."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM pull_requests WHERE uuid = ?",
+            (pr_uuid,),
+        )
+        return bool(cursor.rowcount > 0)
+
+
 def update_pr_diff(pr_uuid: str, diff: str, head_commit: str) -> int:
     """Add a new diff snapshot and return the new revision number."""
     with get_connection() as conn:

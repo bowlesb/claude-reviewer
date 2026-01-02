@@ -40,14 +40,14 @@ def main() -> None:
 @main.command()
 @click.option("--title", "-t", required=True, help="PR title")
 @click.option("--description", "-d", default="", help="PR description")
-@click.option("--base", "-b", default="main", help="Base branch to compare against")
+@click.option("--base", "-b", default=None, help="Base branch (default: auto-detect main/master)")
 @click.option("--head", "-h", default=None, help="Head branch (default: current branch)")
 @click.option("--repo", "-r", default=".", help="Path to git repository")
 @click.option("--port", "-p", default=3456, help="Port for review URL (default: 3456)")
 def create(
     title: str,
     description: str,
-    base: str,
+    base: str | None,
     head: str | None,
     repo: str,
     port: int,
@@ -59,6 +59,43 @@ def create(
 
         # Get head branch (default to current)
         head_ref = head or git.get_current_branch()
+
+        # Auto-detect base branch if not provided
+        if not base:
+            # Try to find the default branch
+            possible_defaults = ["main", "master", "trunk", "development"]
+            
+            # 1. Try to get semantic default from remote
+            try:
+                # This is a bit hacky parsing but works for standard git output
+                remote_info = subprocess.run(
+                    ["git", "remote", "show", "origin"], 
+                    cwd=repo_path, 
+                    capture_output=True, 
+                    text=True
+                ).stdout
+                for line in remote_info.split("\n"):
+                    if "HEAD branch:" in line:
+                        remote_default = line.split(":")[1].strip()
+                        if remote_default:
+                            base = remote_default
+                            break
+            except Exception:
+                pass
+
+            # 2. If remote detection failed, check local branches for common names
+            if not base:
+                local_branches = git.get_branches()
+                for name in possible_defaults:
+                    if name in local_branches:
+                        base = name
+                        break
+            
+            # 3. Fallback
+            if not base:
+                base = "main"
+                
+            console.print(f"[dim]Auto-detected base branch: {base}[/dim]")
 
         if head_ref == base:
             console.print(
@@ -187,18 +224,48 @@ def comments(pr_id: str, output_format: str, unresolved: bool) -> None:
     default=None,
 )
 @click.option("--limit", "-l", default=20, help="Maximum number of PRs to show")
-def list_prs(repo: str | None, status: str | None, limit: int) -> None:
-    """List all PRs."""
+@click.option("--all", "-a", "show_all", is_flag=True, help="Show PRs from all repositories")
+def list_prs(repo: str | None, status: str | None, limit: int, show_all: bool) -> None:
+    """List PRs.
+
+    By default, shows PRs for the current repository only.
+    Use --all to show PRs from all repositories.
+    """
     status_filter = PRStatus(status) if status else None
-    repo_path = str(Path(repo).resolve()) if repo else None
+    
+    # Determine repo path filter
+    repo_path = None
+    if repo:
+        repo_path = str(Path(repo).resolve())
+    elif not show_all:
+        try:
+            # Try to detect current git repo scope
+            cwd = Path.cwd()
+            git_root = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=cwd,
+                capture_output=True,
+                text=True
+            ).stdout.strip()
+            
+            if git_root:
+                repo_path = str(Path(git_root).resolve())
+        except Exception:
+            # Not in a git repo or git not found, fallback to showing all (or just don't filter)
+            pass
 
     prs = db.list_prs(repo_path=repo_path, status=status_filter, limit=limit)
 
     if not prs:
-        console.print("[dim]No PRs found[/dim]")
+        if repo_path:
+            console.print(f"[dim]No PRs found for repository: {repo_path}[/dim]")
+            console.print("[dim]Use --all to see PRs from other repositories[/dim]")
+        else:
+            console.print("[dim]No PRs found[/dim]")
         return
 
-    table = Table(title="Pull Requests")
+    title_text = "Pull Requests" if show_all or not repo_path else f"Pull Requests ({Path(repo_path).name})"
+    table = Table(title=title_text)
     table.add_column("ID", style="cyan")
     table.add_column("Title", style="white")
     table.add_column("Branch", style="dim")
@@ -225,6 +292,50 @@ def list_prs(repo: str | None, status: str | None, limit: int) -> None:
         )
 
     console.print(table)
+
+
+@main.command()
+@click.argument("pr_id")
+def close(pr_id: str) -> None:
+    """Close a PR without merging."""
+    pr = db.get_pr_by_uuid(pr_id)
+    if not pr:
+        console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
+        sys.exit(1)
+
+    if pr.status == PRStatus.MERGED:
+        console.print(f"[yellow]Warning: PR '{pr_id}' is already merged[/yellow]")
+        return
+        
+    if pr.status == PRStatus.CLOSED:
+        console.print(f"[yellow]PR '{pr_id}' is already closed[/yellow]")
+        return
+
+    if click.confirm(f"Are you sure you want to close PR #{pr_id} '{pr.title}'?"):
+        db.update_pr_status(pr_id, PRStatus.CLOSED)
+        console.print(f"[green]PR #{pr_id} closed[/green]")
+
+
+@main.command()
+@click.argument("pr_id")
+@click.option("--force", "-f", is_flag=True, help="Force delete without confirmation")
+def delete(pr_id: str, force: bool) -> None:
+    """Delete a PR and all associated data."""
+    pr = db.get_pr_by_uuid(pr_id)
+    if not pr:
+        console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
+        sys.exit(1)
+
+    if not force:
+        console.print(f"[bold red]Warning: This will permanently delete PR #{pr_id} and all its comments/reviews.[/bold red]")
+        if not click.confirm(f"Are you sure you want to delete PR #{pr_id} '{pr.title}'?"):
+            console.print("[dim]Aborted[/dim]")
+            return
+
+    if db.delete_pr(pr_id):
+        console.print(f"[green]PR #{pr_id} deleted[/green]")
+    else:
+        console.print(f"[red]Failed to delete PR #{pr_id}[/red]")
 
 
 @main.command()
