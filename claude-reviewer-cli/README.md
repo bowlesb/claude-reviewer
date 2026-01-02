@@ -138,7 +138,21 @@ Start it with:
 claude-reviewer serve
 ```
 
-Then open http://localhost:3456
+This automatically pulls the Docker image from Docker Hub and starts the web UI.
+Open http://localhost:3456 to view your PRs.
+
+### Serve Options
+
+```bash
+# Use a different port
+claude-reviewer serve --port 8080
+
+# Skip pulling latest image (use cached)
+claude-reviewer serve --no-pull
+
+# Development mode (uses local docker-compose)
+claude-reviewer serve --dev
+```
 
 ## Configuration
 
@@ -204,31 +218,39 @@ When making significant changes, use the local review system:
    ```
 ```
 
-## Docker Image
+## Docker
 
-The web UI is also available as a Docker image:
+The `claude-reviewer serve` command automatically pulls and runs the Docker image.
+You don't need to manually manage Docker - just run:
 
 ```bash
-# Pull from Docker Hub
-docker pull bowlesb/claude-reviewer:latest
+claude-reviewer serve   # Pulls image and starts container
+claude-reviewer stop    # Stops the container
+```
 
-# Run directly
+### Manual Docker Usage
+
+If you prefer to run Docker manually:
+
+```bash
+# Pull and run
 docker run -d \
+  --name claude-reviewer-web \
   -p 3456:3000 \
   -v ~/.claude-reviewer:/data \
   -v ~:/host-home:ro \
   bowlesb/claude-reviewer:latest
 ```
 
-Or use Docker Compose (recommended):
+### Development with Docker Compose
+
+For local development:
 
 ```bash
-# Clone the repo
 git clone https://github.com/bowlesb/claude-reviewer
 cd claude-reviewer
-
-# Start with Docker Compose
-docker compose up -d
+pip install -e claude-reviewer-cli
+claude-reviewer serve --dev
 ```
 
 ## Integration with Claude Code

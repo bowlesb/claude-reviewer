@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -117,12 +118,13 @@ def status(pr_id: str) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
 
     color = status_colors.get(pr.status, "white")
@@ -206,12 +208,13 @@ def list_prs(repo: str | None, status: str | None, limit: int) -> None:
     table.add_column("Status", style="bold")
     table.add_column("Updated", style="dim")
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
 
     for pr in prs:
@@ -342,12 +345,13 @@ def show(pr_id: str) -> None:
         console.print(f"[red]Error: PR '{pr_id}' not found[/red]")
         sys.exit(1)
 
+    # GitHub-style status colors
     status_colors = {
-        PRStatus.PENDING: "yellow",
-        PRStatus.APPROVED: "green",
-        PRStatus.CHANGES_REQUESTED: "red",
-        PRStatus.MERGED: "blue",
-        PRStatus.CLOSED: "dim",
+        PRStatus.PENDING: "#d29922",          # GitHub yellow
+        PRStatus.APPROVED: "#3fb950",         # GitHub green
+        PRStatus.CHANGES_REQUESTED: "#f85149", # GitHub red
+        PRStatus.MERGED: "#a371f7",           # GitHub purple
+        PRStatus.CLOSED: "#8b949e",           # GitHub gray
     }
     color = status_colors.get(pr.status, "white")
 
@@ -382,107 +386,214 @@ def show(pr_id: str) -> None:
         console.print(Syntax(preview, "diff", theme="monokai"))
 
 
+def is_port_in_use(port: int) -> bool:
+    """Check if a port is already in use."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex(('localhost', port)) == 0
+
+
 def find_web_dir() -> Path | None:
-    """Find the web app directory containing docker-compose.yml."""
+    """Find the claude-reviewer web app directory for development.
+
+    IMPORTANT: Does NOT check current working directory to avoid
+    accidentally using a project's own docker-compose.yml.
+
+    This is only used when --dev flag is passed or CLAUDE_REVIEWER_WEB_DIR is set.
+    """
     # Check environment variable first
     if env_dir := os.environ.get("CLAUDE_REVIEWER_WEB_DIR"):
         path = Path(env_dir)
         if (path / "docker-compose.yml").exists():
             return path
 
-    # Check current working directory
-    cwd = Path.cwd()
-    if (cwd / "docker-compose.yml").exists():
-        return cwd
-
-    # Check parent directories (up to 3 levels)
-    for parent in [cwd.parent, cwd.parent.parent, cwd.parent.parent.parent]:
-        if (parent / "docker-compose.yml").exists():
-            return parent
-
-    # Check relative to source file (for development)
+    # Check relative to source file (for development installs)
     cli_dir = Path(__file__).parent.parent
     web_dir = cli_dir.parent
     if (web_dir / "docker-compose.yml").exists():
-        return web_dir
+        # Verify it's actually the claude-reviewer compose file
+        compose_content = (web_dir / "docker-compose.yml").read_text()
+        if "claude-reviewer" in compose_content or "claude_reviewer" in compose_content:
+            return web_dir
+
+    # Check common install locations
+    home = Path.home()
+    common_paths = [
+        home / ".claude-reviewer" / "web",
+        home / "claude-reviewer",
+        Path("/opt/claude-reviewer"),
+    ]
+    for path in common_paths:
+        if (path / "docker-compose.yml").exists():
+            return path
 
     return None
+
+
+# Docker image to use
+DOCKER_IMAGE = "bowlesb/claude-reviewer:latest"
+# Container name for running the web UI
+CONTAINER_NAME = "claude-reviewer-web"
+# Unique project name to avoid conflicts with other docker-compose projects (for dev mode)
+COMPOSE_PROJECT_NAME = "claude-reviewer"
 
 
 @main.command()
 @click.option("--port", "-p", default=3456, help="Port for web UI (default: 3456)")
 @click.option("--detach/--no-detach", "-d", default=True, help="Run in background")
-@click.option("--build/--no-build", default=False, help="Rebuild Docker image")
-@click.option("--dir", "web_dir_opt", default=None, help="Path to claude-reviewer web directory")
-def serve(port: int, detach: bool, build: bool, web_dir_opt: str | None) -> None:
-    """Start the web UI server (Docker)."""
-    # Find the web app directory
-    if web_dir_opt:
-        web_dir = Path(web_dir_opt)
-    else:
-        web_dir = find_web_dir()
+@click.option("--dev", is_flag=True, help="Use local docker-compose for development")
+@click.option("--pull/--no-pull", default=True, help="Pull latest image before starting")
+def serve(port: int, detach: bool, dev: bool, pull: bool) -> None:
+    """Start the web UI server.
 
-    if not web_dir or not (web_dir / "docker-compose.yml").exists():
-        console.print("[red]Error: docker-compose.yml not found[/red]")
-        console.print("[dim]Run this command from the claude-reviewer directory,[/dim]")
-        console.print("[dim]or use --dir to specify the path, or set CLAUDE_REVIEWER_WEB_DIR[/dim]")
+    By default, pulls and runs the Docker image from Docker Hub.
+    Use --dev for local development with docker-compose.
+    """
+    # Check if port is already in use
+    if is_port_in_use(port):
+        console.print(f"[red]Error: Port {port} is already in use[/red]")
+        console.print(f"[dim]Try a different port: claude-reviewer serve --port 3457[/dim]")
         sys.exit(1)
 
-    compose_file = web_dir / "docker-compose.yml"
+    # Check if docker is available
+    docker_check = subprocess.run(
+        ["docker", "info"], capture_output=True, text=True
+    )
+    if docker_check.returncode != 0:
+        console.print("[red]Error: Docker is not running or not installed[/red]")
+        console.print("[dim]Please install Docker: https://docs.docker.com/get-docker/[/dim]")
+        sys.exit(1)
 
+    # Development mode: use docker-compose
+    if dev or os.environ.get("CLAUDE_REVIEWER_WEB_DIR"):
+        web_dir = find_web_dir()
+        if not web_dir:
+            console.print("[red]Error: Development mode requires claude-reviewer source[/red]")
+            console.print("")
+            console.print("[bold]Clone the repository:[/bold]")
+            console.print("  [cyan]git clone https://github.com/bowlesb/claude-reviewer[/cyan]")
+            console.print("  [cyan]cd claude-reviewer[/cyan]")
+            console.print("  [cyan]pip install -e claude-reviewer-cli[/cyan]")
+            sys.exit(1)
+
+        compose_file = web_dir / "docker-compose.yml"
+        console.print(f"[bold]Starting Claude Reviewer (dev mode) on port {port}...[/bold]")
+        console.print(f"[dim]Using: {compose_file}[/dim]")
+
+        cmd = ["docker", "compose", "-f", str(compose_file), "-p", COMPOSE_PROJECT_NAME]
+        up_cmd = cmd + ["up", "--build"] if dev else cmd + ["up"]
+        if detach:
+            up_cmd.append("-d")
+
+        env = os.environ.copy()
+        env["PORT"] = str(port)
+
+        result = subprocess.run(up_cmd, cwd=web_dir, env=env)
+
+        if result.returncode == 0 and detach:
+            console.print(
+                Panel(
+                    f"[green]Web UI started (dev mode)![/green]\n\n"
+                    f"[bold]URL:[/bold] http://localhost:{port}\n\n"
+                    f"[dim]Stop with: claude-reviewer stop[/dim]",
+                    title="Claude Reviewer",
+                )
+            )
+        elif result.returncode != 0:
+            console.print("[red]Failed to start web UI[/red]")
+            sys.exit(1)
+        return
+
+    # Production mode: pull and run from Docker Hub
     console.print(f"[bold]Starting Claude Reviewer web UI on port {port}...[/bold]")
 
-    cmd = ["docker", "compose", "-f", str(compose_file)]
+    # Stop existing container if running
+    subprocess.run(
+        ["docker", "rm", "-f", CONTAINER_NAME],
+        capture_output=True,
+    )
 
-    if build:
-        console.print("[dim]Building Docker image...[/dim]")
-        subprocess.run(cmd + ["build"], cwd=web_dir, check=True)
-
-    up_cmd = cmd + ["up"]
-    if detach:
-        up_cmd.append("-d")
-
-    env = os.environ.copy()
-    env["PORT"] = str(port)
-
-    result = subprocess.run(up_cmd, cwd=web_dir, env=env)
-
-    if result.returncode == 0 and detach:
-        console.print(
-            Panel(
-                f"[green]Web UI started successfully![/green]\n\n"
-                f"[bold]URL:[/bold] http://localhost:{port}",
-                title="Claude Reviewer",
-            )
+    # Pull latest image
+    if pull:
+        console.print(f"[dim]Pulling {DOCKER_IMAGE}...[/dim]")
+        pull_result = subprocess.run(
+            ["docker", "pull", DOCKER_IMAGE],
+            capture_output=True,
+            text=True,
         )
-    elif result.returncode != 0:
+        if pull_result.returncode != 0:
+            console.print(f"[yellow]Warning: Could not pull latest image[/yellow]")
+            console.print(f"[dim]{pull_result.stderr}[/dim]")
+
+    # Ensure data directory exists
+    data_dir = Path.home() / ".claude-reviewer"
+    data_dir.mkdir(exist_ok=True)
+
+    # Run the container
+    run_cmd = [
+        "docker", "run",
+        "--name", CONTAINER_NAME,
+        "-p", f"{port}:3000",
+        "-v", f"{data_dir}:/data",
+        "-v", f"{Path.home()}:/host-home:ro",
+        "-e", "DATABASE_PATH=/data/data.db",
+    ]
+
+    if detach:
+        run_cmd.append("-d")
+
+    run_cmd.append(DOCKER_IMAGE)
+
+    result = subprocess.run(run_cmd, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        if detach:
+            console.print(
+                Panel(
+                    f"[green]Web UI started successfully![/green]\n\n"
+                    f"[bold]URL:[/bold] http://localhost:{port}\n\n"
+                    f"[dim]Stop with: claude-reviewer stop[/dim]",
+                    title="Claude Reviewer",
+                )
+            )
+    else:
         console.print("[red]Failed to start web UI[/red]")
+        console.print(f"[dim]{result.stderr}[/dim]")
         sys.exit(1)
 
 
 @main.command()
-@click.option("--dir", "web_dir_opt", default=None, help="Path to claude-reviewer web directory")
-def stop(web_dir_opt: str | None) -> None:
-    """Stop the web UI server."""
-    if web_dir_opt:
-        web_dir = Path(web_dir_opt)
-    else:
-        web_dir = find_web_dir()
+def stop() -> None:
+    """Stop the web UI server.
 
-    if not web_dir or not (web_dir / "docker-compose.yml").exists():
-        console.print("[red]Error: docker-compose.yml not found[/red]")
-        console.print("[dim]Run this command from the claude-reviewer directory,[/dim]")
-        console.print("[dim]or use --dir to specify the path, or set CLAUDE_REVIEWER_WEB_DIR[/dim]")
-        sys.exit(1)
-
-    compose_file = web_dir / "docker-compose.yml"
-
+    This only stops claude-reviewer containers, not other Docker services.
+    """
     console.print("[bold]Stopping Claude Reviewer web UI...[/bold]")
-    subprocess.run(
-        ["docker", "compose", "-f", str(compose_file), "down"],
-        cwd=web_dir,
+
+    stopped = False
+
+    # Try to stop the standalone container first (production mode)
+    result = subprocess.run(
+        ["docker", "rm", "-f", CONTAINER_NAME],
+        capture_output=True,
+        text=True,
     )
-    console.print("[green]Stopped[/green]")
+    if result.returncode == 0:
+        stopped = True
+
+    # Also try to stop docker-compose containers (dev mode)
+    compose_result = subprocess.run(
+        ["docker", "compose", "-p", COMPOSE_PROJECT_NAME, "down"],
+        capture_output=True,
+        text=True,
+    )
+    if compose_result.returncode == 0 and "Removed" in compose_result.stderr:
+        stopped = True
+
+    if stopped:
+        console.print("[green]Stopped[/green]")
+    else:
+        console.print("[yellow]No claude-reviewer containers were running[/yellow]")
 
 
 @main.command()
@@ -516,17 +627,19 @@ def reply(pr_id: str, comment_uuid: str, message: str, author: str) -> None:
 @click.option(
     "--until",
     "-u",
-    type=click.Choice(["approved", "changes_requested", "pending", "any_change"]),
-    default="approved",
-    help="Wait until this status (default: approved)",
+    type=click.Choice(["approved", "changes_requested", "feedback_given", "pending", "any_change"]),
+    default="feedback_given",
+    help="Wait until this status (default: feedback_given = approved or changes_requested)",
 )
 @click.option("--interval", "-i", default=2, help="Polling interval in seconds (default: 2)")
 @click.option("--timeout", "-t", default=0, help="Timeout in seconds (0 = no timeout)")
 def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
     """Watch a PR and wait for status changes.
 
-    Useful for waiting after making changes to see if the reviewer approves.
+    Useful for waiting after creating a PR to see reviewer feedback.
     Uses a spinner animation while waiting.
+
+    The default --until feedback_given waits for either approval or changes_requested.
     """
     from rich.live import Live
     from rich.spinner import Spinner
@@ -593,14 +706,33 @@ def watch(pr_id: str, until: str, interval: int, timeout: int) -> None:
                                     f"  [cyan][{c.file_path}:{c.line_number}][/cyan] {c.content}"
                                 )
                         sys.exit(0)
+                elif until == "feedback_given":
+                    # Wait for either approved or changes_requested
+                    if current_status in ("approved", "changes_requested"):
+                        live.stop()
+                        if current_status == "approved":
+                            console.print("[#3fb950]✓ PR approved![/#3fb950]")
+                        else:
+                            console.print("[#f85149]✓ Changes requested[/#f85149]")
+                            # Show the comments
+                            comments_list = db.get_comments(pr_id, unresolved_only=True)
+                            if comments_list:
+                                console.print(f"\n[bold]Review comments:[/bold]")
+                                for c in comments_list:
+                                    console.print(
+                                        f"  [cyan][{c.file_path}:{c.line_number}][/cyan] "
+                                        f"[dim]({c.uuid})[/dim] {c.content}"
+                                    )
+                        sys.exit(0)
                 else:
                     # Check for specific status
                     if current_status == until:
                         live.stop()
+                        # GitHub-style status colors
                         status_colors = {
-                            "approved": "green",
-                            "changes_requested": "red",
-                            "pending": "yellow",
+                            "approved": "#3fb950",
+                            "changes_requested": "#f85149",
+                            "pending": "#d29922",
                         }
                         color = status_colors.get(until, "white")
                         console.print(f"[{color}]✓ PR is now {until}![/{color}]")
