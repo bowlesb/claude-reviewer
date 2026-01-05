@@ -20,6 +20,8 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 // Map file extensions to Prism language identifiers
@@ -264,6 +266,22 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
       newExpanded.add(path);
     }
     setExpandedFiles(newExpanded);
+  };
+
+  const expandAll = () => {
+    if (!data) return;
+    setExpandedFiles(new Set(data.files.map(f => f.path)));
+  };
+
+  const collapseAll = () => {
+    setExpandedFiles(new Set());
+  };
+
+  const scrollToDiff = (path: string) => {
+    const element = document.getElementById(`file-${path.replace(/[^a-zA-Z0-9]/g, '-')}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const addComment = async () => {
@@ -555,17 +573,36 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         {/* Sidebar */}
         <aside className="pr-sidebar">
           <div className="sidebar-section">
-            <h3>Files Changed ({files.length})</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h3>Files Changed ({files.length})</h3>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <button
+                  onClick={expandAll}
+                  title="Expand All"
+                  style={{ padding: '0.25rem', background: 'transparent', color: '#8b949e' }}
+                >
+                  <Maximize2 size={14} />
+                </button>
+                <button
+                  onClick={collapseAll}
+                  title="Collapse All"
+                  style={{ padding: '0.25rem', background: 'transparent', color: '#8b949e' }}
+                >
+                  <Minimize2 size={14} />
+                </button>
+              </div>
+            </div>
             <div className="file-list">
               {files.map((file) => (
-                <a
+                <button
                   key={file.path}
                   className={`file-item ${expandedFiles.has(file.path) ? 'active' : ''}`}
-                  href={`#file-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault(); // Prevent default anchor behavior
                     if (!expandedFiles.has(file.path)) {
                       toggleFile(file.path);
                     }
+                    scrollToDiff(file.path);
                   }}
                 >
                   <File size={14} />
@@ -574,7 +611,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                     <span className="additions">+{file.additions}</span>
                     <span className="deletions">-{file.deletions}</span>
                   </span>
-                </a>
+                </button>
               ))}
             </div>
           </div>
