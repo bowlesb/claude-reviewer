@@ -19,9 +19,11 @@ import {
   Code,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Plus,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
 } from 'lucide-react';
 
 // Map file extensions to Prism language identifiers
@@ -167,6 +169,35 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
   const [reviewSummary, setReviewSummary] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [previewMode, setPreviewMode] = useState<Set<string>>(new Set());
+  // Track expanded context: key is "filePath:hunkIndex:direction", value is array of lines
+  const [expandedContext, setExpandedContext] = useState<Map<string, string[]>>(new Map());
+  const [loadingContext, setLoadingContext] = useState<Set<string>>(new Set());
+
+  const fetchContext = async (filePath: string, startLine: number, endLine: number, key: string) => {
+    if (loadingContext.has(key)) return;
+
+    setLoadingContext(prev => new Set(prev).add(key));
+    try {
+      const res = await fetch(`/api/prs/${id}/context?file=${encodeURIComponent(filePath)}&start=${startLine}&end=${endLine}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedContext(prev => {
+          const next = new Map(prev);
+          const existing = next.get(key) || [];
+          next.set(key, [...existing, ...data.lines]);
+          return next;
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch context:', e);
+    } finally {
+      setLoadingContext(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
 
   const isMarkdownFile = (path: string) => {
     const ext = path.split('.').pop()?.toLowerCase();
@@ -552,6 +583,48 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         <div className="pr-title-row">
           <GitPullRequest size={24} className="pr-icon" />
           <h1>{pr.title}</h1>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginLeft: 'auto' }}>
+            <button
+              onClick={expandAll}
+              title="Expand All"
+              style={{
+                width: '28px',
+                height: '14px',
+                background: '#21262d',
+                color: '#58a6ff',
+                border: '1px solid #30363d',
+                borderRadius: '14px 14px 0 0',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                outline: 'none'
+              }}
+            >
+              <ChevronUp size={12} />
+            </button>
+            <button
+              onClick={collapseAll}
+              title="Collapse All"
+              style={{
+                width: '28px',
+                height: '14px',
+                background: '#21262d',
+                color: '#8b949e',
+                border: '1px solid #30363d',
+                borderRadius: '0 0 14px 14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                outline: 'none'
+              }}
+            >
+              <ChevronDown size={12} />
+            </button>
+          </div>
           <span className="status-badge" style={{ backgroundColor: config.color }}>
             <StatusIcon size={14} />
             {config.label}
@@ -573,41 +646,7 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
         {/* Sidebar */}
         <aside className="pr-sidebar">
           <div className="sidebar-section">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h3>Files Changed ({files.length})</h3>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={expandAll}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    background: 'transparent',
-                    color: '#58a6ff',
-                    fontSize: '0.75rem',
-                    border: '1px solid #30363d',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Maximize2 size={12} style={{ marginRight: '0.25rem' }} />
-                  Expand All
-                </button>
-                <button
-                  onClick={collapseAll}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    background: 'transparent',
-                    color: '#8b949e',
-                    fontSize: '0.75rem',
-                    border: '1px solid #30363d',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Minimize2 size={12} style={{ marginRight: '0.25rem' }} />
-                  Collapse All
-                </button>
-              </div>
-            </div>
+            <h3>Files Changed ({files.length})</h3>
             <div className="file-list">
               {files.map((file) => (
                 <button
@@ -731,14 +770,26 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                     {(() => {
                       let oldLineNum = 0;
                       let newLineNum = 0;
+                      let hunkIndex = -1;
+                      let hunkStartLine = 0;
+
+                      // Pre-process to find hunk boundaries
+                      const hunkStarts: number[] = [];
+                      diffLines.forEach((line, idx) => {
+                        if (line.startsWith('@@')) {
+                          hunkStarts.push(idx);
+                        }
+                      });
 
                       return diffLines.map((line, idx) => {
                         // Parse hunk header for line numbers
                         if (line.startsWith('@@')) {
+                          hunkIndex++;
                           const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/);
                           if (match) {
                             oldLineNum = parseInt(match[1]) - 1;
                             newLineNum = parseInt(match[2]) - 1;
+                            hunkStartLine = newLineNum + 1;
                           }
                         }
 
@@ -779,30 +830,78 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                           (c) => c.comment.line_number === currentLine && !line.startsWith('-') && !line.startsWith('@@')
                         );
 
+                        // Check if this is the last line before next hunk or end of file
+                        const nextHunkIdx = hunkStarts[hunkIndex + 1];
+                        const isLastLineOfHunk = nextHunkIdx !== undefined
+                          ? idx === nextHunkIdx - 1
+                          : idx === diffLines.length - 1;
+
+                        // Context expansion keys
+                        const expandUpKey = `${file.path}:${hunkIndex}:up`;
+                        const expandDownKey = `${file.path}:${hunkIndex}:down`;
+                        const expandedUpLines = expandedContext.get(expandUpKey) || [];
+                        const expandedDownLines = expandedContext.get(expandDownKey) || [];
+
+                        // Calculate how many more lines we've already expanded
+                        const expandedUpCount = expandedUpLines.length;
+                        const expandedDownCount = expandedDownLines.length;
+
                         return (
                           <div key={idx}>
-                            <div className={`diff-line ${lineClasses}`}>
-                              <span className={`line-num line-num-old ${lineClasses}`}>{displayOldLine}</span>
-                              <span className={`line-num line-num-new ${lineClasses}`}>{displayNewLine}</span>
-                              <span className={`line-indicator ${lineClasses}`}>{indicator}</span>
-                              <span
-                                className={`line-content ${lineClasses}`}
-                                onClick={() => {
-                                  if (!line.startsWith('-') && !line.startsWith('@@')) {
-                                    setCommentingAt({ file: file.path, line: currentLine });
-                                  }
-                                }}
-                              >
-                                {line.startsWith('@@') ? (
-                                  <span className="hunk-info">{line}</span>
-                                ) : (
+                            {/* Hide @@ header, just show expand buttons */}
+                            {!line.startsWith('@@') && (
+                              <div className={`diff-line ${lineClasses}`}>
+                                <span className={`line-num line-num-old ${lineClasses}`}>{displayOldLine}</span>
+                                <span className={`line-num line-num-new ${lineClasses}`}>{displayNewLine}</span>
+                                <span className={`line-indicator ${lineClasses}`}>{indicator}</span>
+                                <span
+                                  className={`line-content ${lineClasses}`}
+                                  onClick={() => {
+                                    if (!line.startsWith('-')) {
+                                      setCommentingAt({ file: file.path, line: currentLine });
+                                    }
+                                  }}
+                                >
                                   <SyntaxLine
                                     code={line.startsWith('+') || line.startsWith('-') ? line.slice(1) : line}
                                     language={getLanguage(file.path)}
                                   />
-                                )}
-                              </span>
-                            </div>
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Expand up button - inside hunk, right after @@ header */}
+                            {line.startsWith('@@') && hunkStartLine > 1 && hunkStartLine - expandedUpCount > 1 && (
+                              <div className="expand-context-divider inside-hunk">
+                                <button
+                                  className="expand-context-btn expand-up"
+                                  onClick={() => {
+                                    const linesToFetch = 10;
+                                    const end = hunkStartLine - expandedUpCount - 1;
+                                    const start = Math.max(1, end - linesToFetch + 1);
+                                    fetchContext(file.path, start, end, expandUpKey);
+                                  }}
+                                  title={`Show ${Math.min(10, hunkStartLine - expandedUpCount - 1)} more lines above`}
+                                >
+                                  {loadingContext.has(expandUpKey) ? <MoreHorizontal size={10} /> : <Plus size={10} />}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Show already expanded lines above (after @@ header) */}
+                            {line.startsWith('@@') && expandedUpLines.length > 0 && expandedUpLines.map((expandedLine, i) => {
+                              const lineNum = hunkStartLine - expandedUpLines.length + i;
+                              return (
+                                <div key={`expanded-up-${i}`} className="diff-line line-ctx expanded-context">
+                                  <span className="line-num line-num-old line-ctx">{lineNum}</span>
+                                  <span className="line-num line-num-new line-ctx">{lineNum}</span>
+                                  <span className="line-indicator line-ctx"> </span>
+                                  <span className="line-content line-ctx">
+                                    <SyntaxLine code={expandedLine} language={getLanguage(file.path)} />
+                                  </span>
+                                </div>
+                              );
+                            })}
 
                             {/* Inline comments with replies */}
                             {lineComments.map(({ comment: c, replies }) => (
@@ -892,6 +991,41 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
                                   </button>
                                 </div>
                               </div>
+                            )}
+
+                            {/* Expand down button at end of hunk */}
+                            {isLastLineOfHunk && !line.startsWith('@@') && (
+                              <>
+                                {/* Show already expanded lines below */}
+                                {expandedDownLines.map((expandedLine, i) => {
+                                  const lineNum = currentLine + i + 1;
+                                  return (
+                                    <div key={`expanded-down-${i}`} className="diff-line line-ctx expanded-context">
+                                      <span className="line-num line-num-old line-ctx">{lineNum}</span>
+                                      <span className="line-num line-num-new line-ctx">{lineNum}</span>
+                                      <span className="line-indicator line-ctx"> </span>
+                                      <span className="line-content line-ctx">
+                                        <SyntaxLine code={expandedLine} language={getLanguage(file.path)} />
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                {/* Expand down button - semicircle */}
+                                <div className="expand-context-divider inside-hunk">
+                                  <button
+                                    className="expand-context-btn expand-down"
+                                    onClick={() => {
+                                      const linesToFetch = 10;
+                                      const start = currentLine + expandedDownCount + 1;
+                                      const end = start + linesToFetch - 1;
+                                      fetchContext(file.path, start, end, expandDownKey);
+                                    }}
+                                    title="Show 10 more lines below"
+                                  >
+                                    {loadingContext.has(expandDownKey) ? <MoreHorizontal size={10} /> : <Plus size={10} />}
+                                  </button>
+                                </div>
+                              </>
                             )}
                           </div>
                         );
