@@ -575,20 +575,36 @@ export default function PRPage({ params }: { params: Promise<{ id: string }> }) 
           <div className="sidebar-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <h3>Files Changed ({files.length})</h3>
-              <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   onClick={expandAll}
-                  title="Expand All"
-                  style={{ padding: '0.25rem', background: 'transparent', color: '#8b949e' }}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: 'transparent',
+                    color: '#58a6ff',
+                    fontSize: '0.75rem',
+                    border: '1px solid #30363d',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
                 >
-                  <Maximize2 size={14} />
+                  <Maximize2 size={12} style={{ marginRight: '0.25rem' }} />
+                  Expand All
                 </button>
                 <button
                   onClick={collapseAll}
-                  title="Collapse All"
-                  style={{ padding: '0.25rem', background: 'transparent', color: '#8b949e' }}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: 'transparent',
+                    color: '#8b949e',
+                    fontSize: '0.75rem',
+                    border: '1px solid #30363d',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
                 >
-                  <Minimize2 size={14} />
+                  <Minimize2 size={12} style={{ marginRight: '0.25rem' }} />
+                  Collapse All
                 </button>
               </div>
             </div>
